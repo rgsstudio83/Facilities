@@ -81,7 +81,7 @@ export default function Header({ onOpenPortal, onOpenQuote, onNavigate, currentV
     >
       {/* Logo */}
       <a href="#home" onClick={(e) => { e.preventDefault(); onNavigate('home'); }} className="flex items-center">
-        <Logo className="h-10 w-auto" />
+        <Logo className="h-14 md:h-16 w-auto object-contain" />
       </a>
 
       {/* Desktop Navigation */}

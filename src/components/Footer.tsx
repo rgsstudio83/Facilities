@@ -37,7 +37,7 @@ export default function Footer({ onOpenPortal, onNavigate }: FooterProps) {
         
         {/* Col 1: Logo & Mission Pitch */}
         <div className="space-y-6 lg:col-span-2">
-          <a href="#home" onClick={() => onNavigate('home')}>
+          <a href="#home" onClick={(e) => { e.preventDefault(); onNavigate('home'); }}>
             <Logo className="h-9 w-auto" />
           </a>
           <p className="font-sans text-xs text-secondary leading-relaxed max-w-sm">
