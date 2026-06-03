@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Montserrat", ui-serif, serif;
+
+  --color-primary: #af101a;
+  --color-primary-hover: #930010;
+  --color-primary-container: #d32f2f;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #fff2f0;
+  
+  --color-secondary: #5f5e5e;
+  --color-background: #f8f9ff;
+  --color-on-surface: #101c29;
+  
+  --color-surface-dim: #cfdbec;
+  --color-surface-container-low: #eef4ff;
+  --color-surface-container: #e4efff;
+  --color-surface-container-high: #dde9fb;
+  --color-surface-container-highest: #d7e4f5;
+  --color-on-surface-variant: #5b403d;
+  
+  --color-success: #2E7D32;
+  --color-border-light: #E2E8F0;
+}
+
+/* Custom styles for transitions and elegant elements */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: var(--font-display);
+}
+
+.premium-card {
+  background-color: white;
+  border-radius: 16px;
+  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.premium-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0px 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+.glass-header {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}

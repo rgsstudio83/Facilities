@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Facilities",
+  "description": "Plataforma de Administração Condominial com portal interativo do condômino, serviços e contato.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
