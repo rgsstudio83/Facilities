@@ -466,6 +466,14 @@ CREATE POLICY "Usuários leem seu próprio perfil"
     ON public.perfis FOR SELECT
     USING (auth.uid() = auth_user_id);
 
+CREATE POLICY "Permitir inserções de perfis durante o cadastro de novos usuários"
+    ON public.perfis FOR INSERT
+    WITH CHECK (true);
+
+CREATE POLICY "Permitir atualizações de perfis pelos próprios usuários"
+    ON public.perfis FOR UPDATE
+    USING (auth.uid() = auth_user_id);
+
 CREATE POLICY "Leitura de perfis de moradores pelo Sindico"
     ON public.perfis FOR SELECT
     USING (

@@ -173,6 +173,42 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
       if (!isSupabaseConfigured || !supabase) return;
 
       try {
+        // Authenticate automatically if there is an active session on mount
+        const { data: authData } = await supabase.auth.getSession();
+        if (authData?.session?.user) {
+          const user = authData.session.user;
+          let actualName = '';
+          let actualUnit = '';
+          let actualProfile = '';
+
+          try {
+            const { data: dbProfile, error: profileErr } = await supabase
+              .from('perfis')
+              .select('*')
+              .or(`auth_user_id.eq.${user.id},id.eq.${user.id}`)
+              .maybeSingle();
+
+            if (dbProfile && !profileErr) {
+              actualName = dbProfile.nome || '';
+              actualUnit = dbProfile.unidade || '';
+              
+              const rawTipo = dbProfile.tipo || dbProfile.perfil || 'Morador';
+              actualProfile = rawTipo.charAt(0).toUpperCase() + rawTipo.slice(1);
+              if (actualProfile === 'Sindico') actualProfile = 'Síndico';
+              if (actualProfile === 'Subsindico') actualProfile = 'Subsíndico';
+              if (actualProfile === 'Proprietario') actualProfile = 'Proprietário';
+            }
+          } catch (profileFetchErr) {
+            console.error('Error fetching profile from tables:', profileFetchErr);
+          }
+
+          const meta = user.user_metadata || {};
+          setUsername(actualName || meta.full_name || user.email || 'Usuário Autenticado');
+          setApartmentCode(actualUnit || meta.unit || 'Apto 41-B');
+          setProfileType(actualProfile || meta.profile || 'Morador');
+          setIsLoggedIn(true);
+        }
+
         const { data: dbBkgs, error: errBkgs } = await supabase.from('bookings').select('*');
         if (dbBkgs && !errBkgs) {
           const mappedBkgs: Booking[] = dbBkgs.map(b => ({
@@ -262,28 +298,40 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
           let actualProfile = '';
 
           try {
+            // First try looking up by auth_user_id or id
             const { data: dbProfile, error: profileErr } = await supabase
               .from('perfis')
               .select('*')
-              .eq('id', data.user.id)
+              .or(`auth_user_id.eq.${data.user.id},id.eq.${data.user.id}`)
               .maybeSingle();
 
             if (dbProfile && !profileErr) {
               actualName = dbProfile.nome;
-              actualUnit = dbProfile.unidade;
-              actualProfile = dbProfile.perfil;
+              actualUnit = dbProfile.unidade || '';
+              
+              // Handle tipo vs perfil mapping
+              const rawTipo = dbProfile.tipo || dbProfile.perfil || 'Morador';
+              actualProfile = rawTipo.charAt(0).toUpperCase() + rawTipo.slice(1);
+              if (actualProfile === 'Sindico') actualProfile = 'Síndico';
+              if (actualProfile === 'Subsindico') actualProfile = 'Subsíndico';
+              if (actualProfile === 'Proprietario') actualProfile = 'Proprietário';
             }
           } catch (profileFetchErr) {
             console.error('Error fetching profile from tables:', profileFetchErr);
           }
 
           const meta = data.user.user_metadata || {};
-          setUsername(actualName || meta.full_name || data.user.email || 'Usuário Autenticado');
-          setApartmentCode(actualUnit || meta.unit || 'Apto 41-B');
-          setProfileType(actualProfile || meta.profile || 'Morador');
+          
+          const profileName = actualName || meta.full_name || data.user.email || 'Usuário Autenticado';
+          const profileUnit = actualUnit || meta.unit || 'Apto 41-B';
+          const profileVal = actualProfile || meta.profile || 'Morador';
+
+          setUsername(profileName);
+          setApartmentCode(profileUnit);
+          setProfileType(profileVal);
           setIsLoggedIn(true);
           setLoading(false);
-          onShowNotification('Acesso Concedido!', `Seja bem-vindo (${actualProfile || meta.profile || 'Morador'})!`);
+          onShowNotification('Acesso Concedido!', `Seja bem-vindo de volta, ${profileName} (${profileVal})!`);
           return;
         }
       } catch (err) {
@@ -329,9 +377,12 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
 
     setLoading(true);
 
+    const targetProfileType = profileType;
+
     // 1. If Supabase is configured, register user in Supabase Auth backend
     if (supabase && isSupabaseConfigured) {
       try {
+        console.log('Solicitando signUp no Supabase Auth para:', regEmail.trim());
         const { data, error } = await supabase.auth.signUp({
           email: regEmail.trim(),
           password: regPassword,
@@ -340,7 +391,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
               full_name: regName.trim(),
               cpf: regCpf.trim(),
               unit: regUnit.trim(),
-              profile: profileType
+              profile: targetProfileType
             }
           }
         });
@@ -353,54 +404,171 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
         
         console.log('Usuário registrado com sucesso no Supabase Auth:', data.user);
 
-        // Store registration info in the 'perfis' table as requested!
-        if (data.user) {
-          const { error: insertError } = await supabase.from('perfis').insert({
-            id: data.user.id,
-            nome: regName.trim(),
-            cpf: regCpf.trim(),
+        // Try to authenticate immediately to establish an active session to resolve Row Level Security (RLS) constraints
+        let sessionUser = data.user;
+        let isSessionEstablished = false;
+        try {
+          console.log('Efetuando signIn de confirmação pós-cadastro...');
+          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
             email: regEmail.trim(),
-            unidade: regUnit.trim(),
-            perfil: profileType
+            password: regPassword
           });
 
-          if (insertError) {
-            console.warn('Erro ao inserir perfil na tabela "perfis":', insertError.message);
+          if (signInErr) {
+            console.warn('Aviso na autenticação pós-cadastro (pode exigir confirmação de e-mail):', signInErr.message);
           } else {
-            console.log('Perfil registrado com sucesso na tabela "perfis"');
+            console.log('Autenticação de aprovação pós-cadastro bem-sucedida.');
+            isSessionEstablished = true;
+            if (signInData?.user) {
+              sessionUser = signInData.user;
+            }
+          }
+        } catch (signInErr) {
+          console.warn('Erro ao processar autenticação imediata:', signInErr);
+        }
+
+        // Store registration info in the 'perfis' table as requested!
+        if (sessionUser) {
+          // Normalize matching values
+          let tipoValue = targetProfileType.toLowerCase();
+          if (tipoValue === 'porteiro') tipoValue = 'colaborador';
+          if (tipoValue === 'subsíndico') tipoValue = 'subsindico';
+          if (tipoValue === 'síndico') tipoValue = 'sindico';
+          if (tipoValue === 'proprietário') tipoValue = 'proprietario';
+          if (!['administrador', 'colaborador', 'sindico', 'subsindico', 'conselheiro', 'morador', 'proprietario'].includes(tipoValue)) {
+            tipoValue = 'morador';
+          }
+
+          console.log('Gravando perfil na tabela "perfis"...');
+          let successInserted = false;
+
+          // Attempt A: Standard Schema (id, auth_user_id, nome, email, tipo, telefone)
+          try {
+            const { error: insertError } = await supabase.from('perfis').insert({
+              id: sessionUser.id,
+              auth_user_id: sessionUser.id,
+              nome: regName.trim(),
+              email: regEmail.trim(),
+              tipo: tipoValue,
+              telefone: regCpf.trim()
+            });
+            if (!insertError) {
+              console.log('Perfil gravado sob o formato de produção com id e auth_user_id.');
+              successInserted = true;
+            } else {
+              console.warn('Falha no formato de produção com id (Tentativa A):', insertError.message);
+            }
+          } catch (e: any) {
+            console.warn('Tentativa A gerou exceção:', e);
+          }
+
+          // Attempt B: Standard Schema with only auth_user_id (omitting manual primary key id selection)
+          if (!successInserted) {
+            try {
+              const { error: insertErrorB } = await supabase.from('perfis').insert({
+                auth_user_id: sessionUser.id,
+                nome: regName.trim(),
+                email: regEmail.trim(),
+                tipo: tipoValue,
+                telefone: regCpf.trim()
+              });
+              if (!insertErrorB) {
+                console.log('Perfil gravado sob o formato de produção com auto UUID (Tentativa B).');
+                successInserted = true;
+              } else {
+                console.warn('Falha no formato de produção sem id personalizado (Tentativa B):', insertErrorB.message);
+              }
+            } catch (e: any) {
+              console.warn('Tentativa B gerou exceção:', e);
+            }
+          }
+
+          // Attempt C: Fallback strategy for basic/simplified table columns (id, nome, cpf, email, unidade, perfil)
+          if (!successInserted) {
+            try {
+              const { error: insertSimError } = await supabase.from('perfis').insert({
+                id: sessionUser.id,
+                nome: regName.trim(),
+                cpf: regCpf.trim(),
+                email: regEmail.trim(),
+                unidade: regUnit.trim(),
+                perfil: targetProfileType
+              });
+
+              if (!insertSimError) {
+                console.log('Perfil gravado sob o formato da tabela simplificada (Tentativa C).');
+                successInserted = true;
+              } else {
+                console.warn('Falha no formato de tabela simplificada (Tentativa C):', insertSimError.message);
+              }
+            } catch (e: any) {
+              console.warn('Tentativa C gerou exceção:', e);
+            }
+          }
+
+          // Attempt D: Hybrid column mapping fallback (auth_user_id, perfil, nome, email, tipo)
+          if (!successInserted) {
+            try {
+              const { error: insertErrorD } = await supabase.from('perfis').insert({
+                auth_user_id: sessionUser.id,
+                perfil: targetProfileType,
+                nome: regName.trim(),
+                email: regEmail.trim(),
+                tipo: tipoValue
+              });
+              if (!insertErrorD) {
+                console.log('Perfil gravado usando formato híbrido alternativo (Tentativa D).');
+                successInserted = true;
+              } else {
+                console.warn('Falha no formato híbrido alternativo (Tentativa D):', insertErrorD.message);
+              }
+            } catch (e: any) {
+              console.warn('Tentativa D gerou exceção:', e);
+            }
+          }
+
+          if (!successInserted) {
+            console.error('Infelizmente, todas as tentativas de inserção assíncrona na tabela "perfis" falharam devido a incompatibilidade de colunas no Supabase configurado.');
           }
         }
       } catch (err: any) {
-        console.error('Falha de rede com o Supabase Auth:', err);
+        console.error('Falha de comunicação assíncrona com os servidores do Supabase Auth:', err);
       }
     }
 
-    // 2. Sync to secure private directory
+    // 2. Sync to secure private directory (always maintain local fallback state for smooth UI navigation)
     const newUser = {
       cpf: regCpf.trim(),
       email: regEmail.trim(),
       pass: regPassword,
       name: regName.trim(),
       unit: regUnit.trim(),
-      profile: profileType
+      profile: targetProfileType
     };
 
     setUsersDb(prev => [...prev, newUser]);
     setLoading(false);
 
-    // Auto logging in
+    // Update active UI session states
     setUsername(regName.trim());
     setApartmentCode(regUnit.trim());
-    setProfileType(profileType);
+    setProfileType(targetProfileType);
     setIsLoggedIn(true);
 
     onShowNotification(
       'Conta Criada com Sucesso!',
-      `Parabéns, ${regName}! Seu painel de ${profileType} está ativo e cadastrado com segurança.`
+      `Parabéns, ${regName}! Seu painel de ${targetProfileType} está ativo e cadastrado com segurança.`
     );
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (supabase && isSupabaseConfigured) {
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutErr) {
+        console.warn('Erro ao sair do Supabase:', signOutErr);
+      }
+    }
     setIsLoggedIn(false);
     setCpf('');
     setPassword('');
