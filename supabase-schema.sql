@@ -316,11 +316,15 @@ CREATE TRIGGER update_assembleias_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+-- Adiciona a coluna de vinculo direto ao condomínio se não existir para simplificar RLS de Síndicos/Conselheiros/Moradores
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS condominio_id UUID REFERENCES public.condominios(id) ON DELETE SET NULL;
+
 -- =========================================================================
 -- DATABASE PERFORMANCE INDEXES
 -- =========================================================================
 
 CREATE INDEX IF NOT EXISTS idx_perfis_auth_user ON public.perfis(auth_user_id);
+CREATE INDEX IF NOT EXISTS idx_perfis_condominio ON public.perfis(condominio_id);
 CREATE INDEX IF NOT EXISTS idx_perfis_tipo ON public.perfis(tipo);
 CREATE INDEX IF NOT EXISTS idx_blocos_condominio ON public.blocos(condominio_id);
 CREATE INDEX IF NOT EXISTS idx_unidades_bloco ON public.unidades(bloco_id);
@@ -404,11 +408,17 @@ RETURNS BOOLEAN SECURITY DEFINER AS $$
 DECLARE
     user_p UUID;
     user_t TEXT;
+    user_c UUID;
 BEGIN
-    SELECT id, tipo INTO user_p, user_t FROM public.perfis WHERE auth_user_id = auth.uid() LIMIT 1;
+    SELECT id, tipo, condominio_id INTO user_p, user_t, user_c FROM public.perfis WHERE auth_user_id = auth.uid() LIMIT 1;
     
     -- Admins/colab have global access
     IF user_t IN ('administrador', 'colaborador') THEN
+        RETURN TRUE;
+    END IF;
+
+    -- Se o perfil possui vínculo direto com o condomínio correspondente
+    IF user_c IS NOT NULL AND user_c = condo_id THEN
         RETURN TRUE;
     END IF;
 

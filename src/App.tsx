@@ -224,7 +224,7 @@ export default function App() {
                   </div>
                   
                   <h1 className="text-3xl md:text-5xl font-extrabold font-display text-on-surface leading-tight tracking-tight">
-                    Administradora de Condomínios em Santos e Baixada Santista
+                    Bem-vindo à Facilities Administradora de Condomínios
                   </h1>
                   
                   <p className="text-base md:text-lg text-secondary max-w-xl font-sans leading-relaxed">
@@ -255,7 +255,7 @@ export default function App() {
                     alt="Dra. Cristhiane Xavier - Gestão de Alta Performance"
                     className="w-full h-auto object-contain max-h-[620px] drop-shadow-2xl translate-y-6"
                     referrerPolicy="no-referrer"
-                    src="https://lh3.googleusercontent.com/aida/AP1WRLtY3C45VAfLmzntHD9uHLKESquFRMWNdOoAobTO88zKY71XncIumhLIrhAS98BOrH1gDJNv1GfSupaMuCD_BvN1VqvMJz2njtMKg-iA1i83dU30t9sHPo4c6wABzhOERek4ZqVcUZqe-G0ixiwb6-9shmd-Odj1HKTyXjfEGBAYQzkLceLjcqumhlNr9cFtwWHAec3baXt4eUB0ndf5SYSwIfY5bqXAQh2vj-ZHWKUEyxQMSp_R4Mm9x2k"
+                    src="https://ejpjtpteycckydrorjpr.supabase.co/storage/v1/object/public/images/advogadacrisxavier.jpg"
                   />
                 </div>
               </div>
