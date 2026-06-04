@@ -52,7 +52,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
   const [regCpf, setRegCpf] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regUnit, setRegUnit] = useState('');
+  const [regUnit, setRegUnit] = useState('Apto Geral');
   const [loading, setLoading] = useState(false);
   const [usersDb, setUsersDb] = useState<{cpf: string, email: string, pass: string, name: string, unit: string, profile: string}[]>(() => {
     const saved = localStorage.getItem('facilities_portal_users');
@@ -753,15 +753,31 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
     setUsersDb(prev => [...prev, newUser]);
     setLoading(false);
 
-    // Update active UI session states
-    setUsername(regName.trim());
-    setApartmentCode(regUnit.trim());
-    setProfileType(targetProfileType);
-    setIsLoggedIn(true);
+    // Sign out from Supabase if we were temporarily signed in during the registration steps
+    if (supabase && isSupabaseConfigured) {
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutErr) {
+        console.warn('Erro ao limpar sessão de cadastro no Supabase:', signOutErr);
+      }
+    }
+
+    // Prefill login credentials and switch tab
+    setCpf(regCpf.trim());
+    setPassword(regPassword);
+    setFormTab('login');
+    setIsLoggedIn(false);
+
+    // Reset registration form inputs
+    setRegName('');
+    setRegCpf('');
+    setRegEmail('');
+    setRegPassword('');
+    setRegUnit('Apto Geral');
 
     onShowNotification(
       'Conta Criada com Sucesso!',
-      `Parabéns, ${regName}! Seu painel de ${targetProfileType} está ativo e cadastrado com segurança.`
+      `Tudo pronto, ${regName}! Por favor, clique em "Entrar no Condomínio" para autenticar e acessar o painel do seu perfil de ${targetProfileType}.`
     );
   };
 
@@ -1122,19 +1138,6 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
                       placeholder="seuemail@exemplo.com"
-                      className="w-full bg-[#f8f9ff] border border-gray-200 outline-none focus:border-primary p-2 rounded text-xs text-[#101c29]"
-                    />
-                  </div>
-
-                  <div className="space-y-0.5">
-                    <label htmlFor="reg-unit-input" className="text-[9px] font-bold text-secondary uppercase block">Unidade / Apartamento</label>
-                    <input
-                      id="reg-unit-input"
-                      type="text"
-                      required
-                      value={regUnit}
-                      onChange={(e) => setRegUnit(e.target.value)}
-                      placeholder="Ex: Apto 41-B, Bloco A"
                       className="w-full bg-[#f8f9ff] border border-gray-200 outline-none focus:border-primary p-2 rounded text-xs text-[#101c29]"
                     />
                   </div>
