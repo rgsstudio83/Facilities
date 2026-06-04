@@ -117,14 +117,6 @@ export default function Header({ onOpenPortal, onOpenQuote, onNavigate, currentV
       {/* Action Buttons */}
       <div className="hidden lg:flex items-center gap-4">
         <button
-          id="header-admin-btn"
-          onClick={onOpenAdminDashboard}
-          className="bg-[#0f1b29] hover:bg-[#15273b] text-white px-4 py-2.5 rounded-lg font-sans text-xs font-bold active:scale-95 transition-all shadow-md inline-flex items-center gap-1.5 cursor-pointer border-0"
-        >
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          Painel Adm
-        </button>
-        <button
           id="header-quote-btn"
           onClick={onOpenQuote}
           className="text-primary hover:text-primary-hover font-medium text-sm px-4 py-2 transition-colors cursor-pointer"
@@ -143,15 +135,6 @@ export default function Header({ onOpenPortal, onOpenQuote, onNavigate, currentV
 
       {/* Mobile Menu Actions */}
       <div className="flex lg:hidden items-center gap-2">
-        <button
-          id="mobile-admin-btn"
-          onClick={onOpenAdminDashboard}
-          className="bg-[#0f1b29] text-white p-2 rounded-lg font-sans text-xs active:scale-95 transition-all shadow-md flex items-center justify-center border-0 font-bold"
-          title="Painel Adm"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1"></span>
-          Adm
-        </button>
         <button
           id="mobile-portal-btn"
           onClick={onOpenPortal}

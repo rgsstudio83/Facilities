@@ -35,6 +35,18 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState<'financeiro' | 'reservas' | 'ocorrencias' | 'atas' | 'balanço'>('financeiro');
 
+  // Registration & profile states
+  const [formTab, setFormTab] = useState<'login' | 'register'>('login');
+  const [profileType, setProfileType] = useState<string>('Morador');
+  const [regName, setRegName] = useState('');
+  const [regCpf, setRegCpf] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regUnit, setRegUnit] = useState('');
+  const [usersDb, setUsersDb] = useState<{cpf: string, pass: string, name: string, unit: string, profile: string}[]>([
+    { cpf: '123', pass: '123', name: 'Roberto Silva', unit: 'Apto 41-B', profile: 'Morador' }
+  ]);
+
   // Sub-dialogs
   const [barCodeModal, setBarCodeModal] = useState<Boleto | null>(null);
 
@@ -199,11 +211,57 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
   const handleCustomLogin = (e: FormEvent) => {
     e.preventDefault();
     if (!cpf || !password) {
-      alert('Por favor, informe credenciais demonstrativas para entrar.');
+      alert('Por favor, informe suas credenciais para entrar.');
       return;
     }
+
+    // Clean inputs and seek match
+    const cleanCpf = cpf.replace(/\D/g, '');
+    const found = usersDb.find(u => u.cpf.replace(/\D/g, '') === cleanCpf && u.pass === password);
+
+    if (found) {
+      setUsername(found.name);
+      setApartmentCode(found.unit);
+      setProfileType(found.profile);
+      setIsLoggedIn(true);
+      onShowNotification('Acesso Concedido!', `Seja bem-vindo de volta, ${found.name} (${found.profile}).`);
+    } else {
+      // Default fallback
+      setUsername(cpf === '123' ? 'Roberto Silva' : 'Morador Associado');
+      setApartmentCode('Apto 41-B');
+      setProfileType('Morador');
+      setIsLoggedIn(true);
+      onShowNotification('Conexão Simulada!', 'Sessão iniciada com credenciais temporárias de demonstração.');
+    }
+  };
+
+  const handleRegisterSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!regName.trim() || !regCpf.trim() || !regEmail.trim() || !regPassword.trim() || !regUnit.trim()) {
+      alert('Por favor, preencha todos os dados obrigatórios para criar sua conta.');
+      return;
+    }
+
+    const newUser = {
+      cpf: regCpf,
+      pass: regPassword,
+      name: regName,
+      unit: regUnit,
+      profile: profileType
+    };
+
+    setUsersDb(prev => [...prev, newUser]);
+
+    // Perform immediate log-in with the assigned custom state
+    setUsername(regName);
+    setApartmentCode(regUnit);
+    setProfileType(profileType);
     setIsLoggedIn(true);
-    onShowNotification('Seja bem-vindo!', 'Seu login simulado de residente foi efetuado.');
+
+    onShowNotification(
+      'Conta Criada com Sucesso!',
+      `Parabéns, ${regName}! Seu painel de ${profileType} está inteiramente ativo.`
+    );
   };
 
   const handleLogout = () => {
@@ -389,45 +447,173 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
               </div>
             </div>
 
-            {/* Right Standard Login Form container */}
-            <div className="w-full max-w-sm bg-white p-8 rounded-2xl border border-[#cfdbec] shadow-md">
-              <form onSubmit={handleCustomLogin} className="space-y-4">
-                <h5 className="font-bold text-center text-sm font-display uppercase tracking-wider text-[#101c29]">Acesso Certificado</h5>
-                
-                <div className="space-y-1">
-                  <label htmlFor="portal-cpf-input" className="text-[10px] font-bold text-secondary uppercase block">CPF do Beneficiário</label>
-                  <input
-                    id="portal-cpf-input"
-                    type="text"
-                    required
-                    value={cpf}
-                    onChange={(e) => setCpf(e.target.value)}
-                    placeholder="000.000.000-00"
-                    className="w-full bg-gray-50 border border-gray-200 outline-none focus:border-primary p-3 rounded-lg text-sm"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label htmlFor="portal-pass-input" className="text-[10px] font-bold text-secondary uppercase block">Senha de Acesso</label>
-                  <input
-                    id="portal-pass-input"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full bg-gray-50 border border-gray-200 outline-none focus:border-primary p-3 rounded-lg text-sm"
-                  />
-                </div>
-
+            {/* Right Standard Login Form / Register container */}
+            <div className="w-full max-w-sm bg-white p-6 md:p-8 rounded-2xl border border-[#cfdbec] shadow-md flex flex-col">
+              
+              {/* Form Mode Selector tabs */}
+              <div className="flex border-b border-gray-200 mb-5 font-sans text-xs font-bold uppercase tracking-wider">
                 <button
-                  id="portal-form-submit"
-                  type="submit"
-                  className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-3 rounded-lg font-bold transition-all text-xs cursor-pointer"
+                  id="tab-mode-login"
+                  type="button"
+                  onClick={() => setFormTab('login')}
+                  className={`flex-1 pb-2.5 text-center transition-all border-b-2 cursor-pointer ${
+                    formTab === 'login'
+                      ? 'border-[#af101a] text-[#af101a] font-extrabold'
+                      : 'border-transparent text-secondary hover:text-primary'
+                  }`}
                 >
-                  Entrar no Condomínio
+                  Entrar
                 </button>
-              </form>
+                <button
+                  id="tab-mode-register"
+                  type="button"
+                  onClick={() => setFormTab('register')}
+                  className={`flex-1 pb-2.5 text-center transition-all border-b-2 cursor-pointer ${
+                    formTab === 'register'
+                      ? 'border-[#af101a] text-[#af101a] font-extrabold'
+                      : 'border-transparent text-secondary hover:text-primary'
+                  }`}
+                >
+                  Criar Conta
+                </button>
+              </div>
+
+              {formTab === 'login' ? (
+                <form onSubmit={handleCustomLogin} className="space-y-4">
+                  <h5 className="font-bold text-center text-xs font-display uppercase tracking-wider text-[#101c29]">Acesso Certificado</h5>
+                  
+                  <div className="space-y-1">
+                    <label htmlFor="portal-cpf-input" className="text-[10px] font-bold text-[#101c29] uppercase block">CPF do Beneficiário</label>
+                    <input
+                      id="portal-cpf-input"
+                      type="text"
+                      required
+                      value={cpf}
+                      onChange={(e) => setCpf(e.target.value)}
+                      placeholder="000.000.000-00"
+                      className="w-full bg-[#f8f9ff] border border-gray-250 outline-none focus:border-primary p-3 rounded-lg text-sm text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="portal-pass-input" className="text-[10px] font-bold text-[#101c29] uppercase block">Senha de Acesso</label>
+                    <input
+                      id="portal-pass-input"
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-[#f8f9ff] border border-gray-250 outline-none focus:border-primary p-3 rounded-lg text-sm text-[#101c29]"
+                    />
+                  </div>
+
+                  <button
+                    id="portal-form-submit"
+                    type="submit"
+                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-3 rounded-lg font-bold transition-all text-xs cursor-pointer"
+                  >
+                    Entrar no Condomínio
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleRegisterSubmit} className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                  <h5 className="font-bold text-center text-xs font-display uppercase tracking-wider text-[#101c29] mb-1">Novo Cadastro</h5>
+                  
+                  <div className="space-y-0.5">
+                    <label htmlFor="reg-name-input" className="text-[9px] font-bold text-secondary uppercase block">Nome Completo</label>
+                    <input
+                      id="reg-name-input"
+                      type="text"
+                      required
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      placeholder="Ex: Roberto Silva"
+                      className="w-full bg-[#f8f9ff] border border-gray-200 outline-none focus:border-primary p-2 rounded text-xs text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <label htmlFor="reg-cpf-input" className="text-[9px] font-bold text-secondary uppercase block">CPF</label>
+                    <input
+                      id="reg-cpf-input"
+                      type="text"
+                      required
+                      value={regCpf}
+                      onChange={(e) => setRegCpf(e.target.value)}
+                      placeholder="000.000.000-00"
+                      className="w-full bg-[#f8f9ff] border border-gray-200 outline-none focus:border-primary p-2 rounded text-xs text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <label htmlFor="reg-email-input" className="text-[9px] font-bold text-secondary uppercase block">E-mail Corporativo</label>
+                    <input
+                      id="reg-email-input"
+                      type="email"
+                      required
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="seuemail@exemplo.com"
+                      className="w-full bg-[#f8f9ff] border border-gray-200 outline-none focus:border-primary p-2 rounded text-xs text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <label htmlFor="reg-unit-input" className="text-[9px] font-bold text-secondary uppercase block">Unidade / Apartamento</label>
+                    <input
+                      id="reg-unit-input"
+                      type="text"
+                      required
+                      value={regUnit}
+                      onChange={(e) => setRegUnit(e.target.value)}
+                      placeholder="Ex: Apto 41-B, Bloco A"
+                      className="w-full bg-[#f8f9ff] border border-gray-200 outline-none focus:border-primary p-2 rounded text-xs text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <label htmlFor="reg-profile-select" className="text-[9px] font-bold text-[#af101a] uppercase block">Tipo de Perfil</label>
+                    <select
+                      id="reg-profile-select"
+                      required
+                      value={profileType}
+                      onChange={(e) => setProfileType(e.target.value)}
+                      className="w-full bg-white border border-primary/40 outline-none focus:border-primary p-2 rounded text-xs text-[#101c29] font-bold cursor-pointer"
+                    >
+                      <option value="Morador">Morador (Residente)</option>
+                      <option value="Proprietário">Proprietário (Donatário)</option>
+                      <option value="Síndico">Síndico (Gestão Geral)</option>
+                      <option value="Subsíndico">Subsíndico (Gestão Setorial)</option>
+                      <option value="Conselheiro">Conselheiro (Conselho Fiscal)</option>
+                      <option value="Porteiro">Porteiro (Controle de Acesso)</option>
+                      <option value="Administrador">Administrador (Facilities Adm)</option>
+                      <option value="Colaborador">Colaborador (Prestador Interno)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <label htmlFor="reg-pass-input" className="text-[9px] font-bold text-secondary uppercase block">Senha de Acesso</label>
+                    <input
+                      id="reg-pass-input"
+                      type="password"
+                      required
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Crie uma senha de acesso"
+                      className="w-full bg-[#f8f9ff] border border-gray-200 outline-none focus:border-primary p-2 rounded text-xs text-[#101c29]"
+                    />
+                  </div>
+
+                  <button
+                    id="portal-reg-submit"
+                    type="submit"
+                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-2.5 rounded font-bold transition-all text-xs cursor-pointer mt-2"
+                  >
+                    Criar Conta & Acessar
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         ) : (
@@ -444,7 +630,8 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
                 </div>
                 <div>
                   <h6 className="font-sans font-bold text-sm text-[#101c29] truncate">{username}</h6>
-                  <p className="text-xs text-secondary">{apartmentCode}</p>
+                  <p className="text-xs text-secondary leading-none">{apartmentCode}</p>
+                  <span className="text-[10px] text-primary font-bold mt-1 block">Perfil: {profileType}</span>
                 </div>
                 <div className="text-[9px] uppercase font-bold text-success bg-green-50 p-1.5 rounded inline-block">
                   ● Conexão Online
