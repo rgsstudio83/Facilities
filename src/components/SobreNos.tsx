@@ -26,7 +26,7 @@ export default function SobreNos() {
               Por que escolher a Facilities?
             </h2>
             <p className="text-base text-on-primary-container/90 leading-relaxed font-sans max-w-lg">
-              Com mais de 15 anos de atuação sólida, unimos a precisão do Direito Condominial à eficiência tecnológica de ponta da plataforma Superlógica para garantir uma administração tranquila e transparente.
+              Com mais de 15 anos de atuação sólida, unimos a precisão do Direito Condominial à eficiência tecnológica de ponta do nosso próprio sistema exclusivo para garantir uma administração tranquila, transparente e com total autonomia.
             </p>
           </div>
 

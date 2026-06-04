@@ -21,7 +21,7 @@ export default function ServicesSection({ onNavigateToService }: ServicesSection
       case 'Expertise Jurídica':
       case 'Suporte Jurídico Coletivo':
         return 'assessoria-juridica';
-      case 'Plataforma Superlógica':
+      case 'Sistema Próprio Facilities':
         return 'prestacao-de-contas';
       case 'Recrutamento e Seleção':
         return 'recursos-humanos';
@@ -48,9 +48,9 @@ export default function ServicesSection({ onNavigateToService }: ServicesSection
       detail: 'Análise contínua das deliberações legais, regimento interno e segurança institucional.',
     },
     {
-      title: 'Plataforma Superlógica',
-      desc: 'Acesso digital total.',
-      detail: 'Uma ferramenta líder de mercado que permite consultar balancetes, agendar e pagar com facilidade.',
+      title: 'Sistema Próprio Facilities',
+      desc: 'Tecnologia própria e integrada.',
+      detail: 'Nosso próprio ecossistema exclusivo para consultar balancetes, fazer reservas de áreas comuns e obter boletos com agilidade.',
     },
     {
       title: 'Recrutamento e Seleção',

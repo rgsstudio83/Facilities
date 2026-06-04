@@ -68,7 +68,7 @@ export default function DiferenciaisSection() {
       details: {
         subtitle: 'Gestão Inteligente na Palma da Mão',
         items: [
-          'Integração nativa com Superlógica (padrão de mercado)',
+          'Sistema operacional próprio e exclusivo da Facilities',
           'Segunda via de boletos, Pix e faturamento facilitado',
           'Prestação de contas diária digitalizada com notas fiscais',
           'Assembleias virtuais certificadas e votações com validade legal'
