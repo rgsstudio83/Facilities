@@ -75,6 +75,17 @@ CREATE TABLE IF NOT EXISTS tickets (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 5. Tabela de Perfis de Usuários
+CREATE TABLE IF NOT EXISTS perfis (
+  id UUID PRIMARY KEY,
+  nome TEXT NOT NULL,
+  cpf TEXT,
+  email TEXT NOT NULL,
+  unidade TEXT,
+  perfil TEXT NOT NULL,
+  data_cadastro TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- Habilitar acesso público de escrita nas tabelas para habilitar leads via formulários do site
 ALTER TABLE contact_messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir inserções públicas" ON contact_messages FOR INSERT WITH CHECK (true);
@@ -89,4 +100,7 @@ CREATE POLICY "Permitir tudo para simulação" ON bookings FOR ALL USING (true);
 
 ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir tudo para simulação" ON tickets FOR ALL USING (true);
+
+ALTER TABLE perfis ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir tudo para simulação de perfis" ON perfis FOR ALL USING (true);
 `;

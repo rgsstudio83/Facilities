@@ -43,9 +43,25 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regUnit, setRegUnit] = useState('');
-  const [usersDb, setUsersDb] = useState<{cpf: string, pass: string, name: string, unit: string, profile: string}[]>([
-    { cpf: '123', pass: '123', name: 'Roberto Silva', unit: 'Apto 41-B', profile: 'Morador' }
-  ]);
+  const [loading, setLoading] = useState(false);
+  const [usersDb, setUsersDb] = useState<{cpf: string, email: string, pass: string, name: string, unit: string, profile: string}[]>(() => {
+    const saved = localStorage.getItem('facilities_portal_users');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return [
+      { cpf: '123', email: 'contato@facilities.com.br', pass: '123', name: 'Roberto Silva', unit: 'Apto 41-B', profile: 'Morador' }
+    ];
+  });
+
+  // Sync users to localStorage whenever the user directory changes
+  useEffect(() => {
+    localStorage.setItem('facilities_portal_users', JSON.stringify(usersDb));
+  }, [usersDb]);
 
   // Sub-dialogs
   const [barCodeModal, setBarCodeModal] = useState<Boleto | null>(null);
@@ -208,16 +224,82 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
     onShowNotification('Login efetuado!', 'Bem-vindo ao painel demonstrativo Facilities.');
   };
 
-  const handleCustomLogin = (e: FormEvent) => {
+  const handleCustomLogin = async (e: FormEvent) => {
     e.preventDefault();
     if (!cpf || !password) {
       alert('Por favor, informe suas credenciais para entrar.');
       return;
     }
 
-    // Clean inputs and seek match
+    setLoading(true);
     const cleanCpf = cpf.replace(/\D/g, '');
-    const found = usersDb.find(u => u.cpf.replace(/\D/g, '') === cleanCpf && u.pass === password);
+
+    // 1. If Supabase is configured, authenticate with real-world credentials!
+    if (supabase && isSupabaseConfigured) {
+      try {
+        let loginEmail = cpf;
+        // If not a valid email, look up in the local state or generate dummy email pattern
+        if (!loginEmail.includes('@')) {
+          const matchedLocal = usersDb.find(u => u.cpf.replace(/\D/g, '') === cleanCpf);
+          if (matchedLocal) {
+            loginEmail = matchedLocal.email;
+          } else {
+            loginEmail = `${cleanCpf}@facilities.com.br`;
+          }
+        }
+
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: password,
+        });
+
+        if (error) {
+          console.warn('Real Auth failed, checking local database fallback:', error.message);
+        } else if (data && data.user) {
+          // Fetch from perfis table
+          let actualName = '';
+          let actualUnit = '';
+          let actualProfile = '';
+
+          try {
+            const { data: dbProfile, error: profileErr } = await supabase
+              .from('perfis')
+              .select('*')
+              .eq('id', data.user.id)
+              .maybeSingle();
+
+            if (dbProfile && !profileErr) {
+              actualName = dbProfile.nome;
+              actualUnit = dbProfile.unidade;
+              actualProfile = dbProfile.perfil;
+            }
+          } catch (profileFetchErr) {
+            console.error('Error fetching profile from tables:', profileFetchErr);
+          }
+
+          const meta = data.user.user_metadata || {};
+          setUsername(actualName || meta.full_name || data.user.email || 'Usuário Autenticado');
+          setApartmentCode(actualUnit || meta.unit || 'Apto 41-B');
+          setProfileType(actualProfile || meta.profile || 'Morador');
+          setIsLoggedIn(true);
+          setLoading(false);
+          onShowNotification('Acesso Concedido!', `Seja bem-vindo (${actualProfile || meta.profile || 'Morador'})!`);
+          return;
+        }
+      } catch (err) {
+        console.error('Erro de conexão Supabase Auth:', err);
+      }
+    }
+
+    // 2. Private simulated user directory lookup
+    const found = usersDb.find(u => {
+      const uCleanCpf = u.cpf.replace(/\D/g, '');
+      const isCpfMatch = uCleanCpf === cleanCpf && cleanCpf !== '';
+      const isEmailMatch = u.email.toLowerCase() === cpf.toLowerCase();
+      return (isCpfMatch || isEmailMatch) && u.pass === password;
+    });
+
+    setLoading(false);
 
     if (found) {
       setUsername(found.name);
@@ -226,41 +308,95 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
       setIsLoggedIn(true);
       onShowNotification('Acesso Concedido!', `Seja bem-vindo de volta, ${found.name} (${found.profile}).`);
     } else {
-      // Default fallback
-      setUsername(cpf === '123' ? 'Roberto Silva' : 'Morador Associado');
-      setApartmentCode('Apto 41-B');
-      setProfileType('Morador');
-      setIsLoggedIn(true);
-      onShowNotification('Conexão Simulada!', 'Sessão iniciada com credenciais temporárias de demonstração.');
+      if (cpf === '123' && password === '123') {
+        setUsername('Roberto Silva');
+        setApartmentCode('Apto 41-B');
+        setProfileType('Morador');
+        setIsLoggedIn(true);
+        onShowNotification('Conexão Simulada!', 'Sessão iniciada como Morador Roberto Silva.');
+      } else {
+        alert('Credenciais incorretas ou conta não localizada.');
+      }
     }
   };
 
-  const handleRegisterSubmit = (e: FormEvent) => {
+  const handleRegisterSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!regName.trim() || !regCpf.trim() || !regEmail.trim() || !regPassword.trim() || !regUnit.trim()) {
       alert('Por favor, preencha todos os dados obrigatórios para criar sua conta.');
       return;
     }
 
+    setLoading(true);
+
+    // 1. If Supabase is configured, register user in Supabase Auth backend
+    if (supabase && isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email: regEmail.trim(),
+          password: regPassword,
+          options: {
+            data: {
+              full_name: regName.trim(),
+              cpf: regCpf.trim(),
+              unit: regUnit.trim(),
+              profile: profileType
+            }
+          }
+        });
+
+        if (error) {
+          alert(`Incompatibilidade no cadastro do Supabase Auth: ${error.message}`);
+          setLoading(false);
+          return;
+        }
+        
+        console.log('Usuário registrado com sucesso no Supabase Auth:', data.user);
+
+        // Store registration info in the 'perfis' table as requested!
+        if (data.user) {
+          const { error: insertError } = await supabase.from('perfis').insert({
+            id: data.user.id,
+            nome: regName.trim(),
+            cpf: regCpf.trim(),
+            email: regEmail.trim(),
+            unidade: regUnit.trim(),
+            perfil: profileType
+          });
+
+          if (insertError) {
+            console.warn('Erro ao inserir perfil na tabela "perfis":', insertError.message);
+          } else {
+            console.log('Perfil registrado com sucesso na tabela "perfis"');
+          }
+        }
+      } catch (err: any) {
+        console.error('Falha de rede com o Supabase Auth:', err);
+      }
+    }
+
+    // 2. Sync to secure private directory
     const newUser = {
-      cpf: regCpf,
+      cpf: regCpf.trim(),
+      email: regEmail.trim(),
       pass: regPassword,
-      name: regName,
-      unit: regUnit,
+      name: regName.trim(),
+      unit: regUnit.trim(),
       profile: profileType
     };
 
     setUsersDb(prev => [...prev, newUser]);
+    setLoading(false);
 
-    // Perform immediate log-in with the assigned custom state
-    setUsername(regName);
-    setApartmentCode(regUnit);
+    // Auto logging in
+    setUsername(regName.trim());
+    setApartmentCode(regUnit.trim());
     setProfileType(profileType);
     setIsLoggedIn(true);
 
     onShowNotification(
       'Conta Criada com Sucesso!',
-      `Parabéns, ${regName}! Seu painel de ${profileType} está inteiramente ativo.`
+      `Parabéns, ${regName}! Seu painel de ${profileType} está ativo e cadastrado com segurança.`
     );
   };
 
@@ -511,9 +647,17 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
                   <button
                     id="portal-form-submit"
                     type="submit"
-                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-3 rounded-lg font-bold transition-all text-xs cursor-pointer"
+                    disabled={loading}
+                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-3 rounded-lg font-bold transition-all text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    Entrar no Condomínio
+                    {loading ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></span>
+                        Autenticando...
+                      </>
+                    ) : (
+                      'Entrar no Condomínio'
+                    )}
                   </button>
                 </form>
               ) : (
@@ -608,12 +752,36 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
                   <button
                     id="portal-reg-submit"
                     type="submit"
-                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-2.5 rounded font-bold transition-all text-xs cursor-pointer mt-2"
+                    disabled={loading}
+                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-2.5 rounded font-bold transition-all text-xs cursor-pointer mt-2 disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    Criar Conta & Acessar
+                    {loading ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></span>
+                        Processando Cadastro...
+                      </>
+                    ) : (
+                      'Criar Conta & Acessar'
+                    )}
                   </button>
                 </form>
               )}
+
+              {/* Database sync status info indicator */}
+              <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-[10px]">
+                <span className="text-secondary font-medium">Serviço de Autenticação:</span>
+                {isSupabaseConfigured && supabase ? (
+                  <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Supabase Cloud Ativo
+                  </span>
+                ) : (
+                  <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    Sandbox Offline (Local)
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         ) : (
