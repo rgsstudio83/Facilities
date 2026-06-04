@@ -1,8 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Load Supabase configuration
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Load and sanitize Supabase configuration
+const cleanEnvVar = (val: string): string => {
+  let cleaned = (val || '').trim();
+  // Strip starting/ending quotes if present (e.g. "https://..." or 'https://...')
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  return cleaned;
+};
+
+const rawUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+const supabaseUrl = cleanEnvVar(rawUrl).replace(/\/$/, ''); // Remove trailing slashes
+const supabaseAnonKey = cleanEnvVar(rawKey);
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
@@ -10,6 +22,17 @@ export const isSupabaseConfigured = Boolean(
   supabaseUrl !== 'https://your-supabase-project.supabase.co' && 
   supabaseAnonKey !== 'your-anon-public-key'
 );
+
+// Safe console diagnostics to help debug without exposing secret keys
+console.log('=== Supabase Config Diagnostics ===', {
+  isConfigured: isSupabaseConfigured,
+  hasUrl: !!supabaseUrl,
+  urlSample: supabaseUrl ? (supabaseUrl.length > 15 ? supabaseUrl.substring(0, 15) + '...' : supabaseUrl) : 'none',
+  urlLength: supabaseUrl ? supabaseUrl.length : 0,
+  hasKey: !!supabaseAnonKey,
+  keyLength: supabaseAnonKey ? supabaseAnonKey.length : 0,
+  viteKeys: Object.keys(import.meta.env).filter(k => k.startsWith('VITE_'))
+});
 
 // Gracefully initialize Supabase client or fallback to placeholder strings to prevent typescript null errors
 const finalUrl = isSupabaseConfigured && supabaseUrl ? supabaseUrl : 'https://placeholder-project-id.supabase.co';

@@ -158,11 +158,15 @@ export function PortalRouterProvider({
               setProfile(null);
               setProfileError('Seu usuário não possui permissões configuradas.');
             }
-            return;
+          } else {
+            setUser(null);
+            setIsLoggedIn(false);
+            setProfile(null);
           }
+          return;
         }
         
-        // Fallback to simulated session
+        // Fallback to simulated session ONLY if Supabase is not configured
         const simSession = localStorage.getItem('facilities_simulated_session');
         if (simSession) {
           const parsed = JSON.parse(simSession);
@@ -352,10 +356,8 @@ export function PortalRouterProvider({
       ];
     }
 
-    const exists = users.some((u: any) => u.email.toLowerCase() === email.toLowerCase() || u.cpf.replace(/\D/g, '') === cleanCpf);
-    if (exists) {
-      throw new Error('E-mail ou CPF já cadastrados no banco de dados local.');
-    }
+    // If the user already exists in simulated storage, we update/overwrite their details to make testing smoother
+    const userIndex = users.findIndex((u: any) => u.email.toLowerCase() === email.toLowerCase() || u.cpf.replace(/\D/g, '') === cleanCpf);
 
     const newUser = {
       cpf: cpf.trim(),
@@ -366,7 +368,11 @@ export function PortalRouterProvider({
       profile: role
     };
 
-    users.push(newUser);
+    if (userIndex !== -1) {
+      users[userIndex] = newUser;
+    } else {
+      users.push(newUser);
+    }
     localStorage.setItem('facilities_portal_users', JSON.stringify(users));
 
     // Auto-login registered user instantly
@@ -403,16 +409,11 @@ export function PortalRouterProvider({
     setSessionLoading(true);
     setProfileError(null);
     
-    // First check simulation mode
     if (!isSupabaseConfigured) {
-      try {
-        const result = await loginSimulated(email, pass);
-        return result;
-      } catch (simErr: any) {
-        throw simErr;
-      } finally {
-        setSessionLoading(false);
-      }
+      const errorMsg = 'Configuração do Supabase pendente. Por favor, acesse o painel de Configurações (Secrets) do seu projeto no AI Studio e adicione suas credenciais reais do Supabase (VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY).';
+      triggerNotification('Configuração Pendente', errorMsg);
+      setSessionLoading(false);
+      throw new Error(errorMsg);
     }
 
     try {
@@ -443,15 +444,11 @@ export function PortalRouterProvider({
       }
       return data;
     } catch (err: any) {
-      const isConnectionError = err.message?.includes('Failed to fetch') || err.message?.includes('fetch failed');
+      const isConnectionError = err.message?.includes('Failed to fetch') || err.message?.includes('fetch failed') || err.message?.includes('NetworkError');
       if (isConnectionError) {
-        console.warn('Conexão Supabase inacessível. Efetuando fallback para login simulado local.');
-        try {
-          const result = await loginSimulated(email, pass);
-          return result;
-        } catch (simErr: any) {
-          throw simErr;
-        }
+        const errorMsg = 'Erro de rede ao conectar com o Supabase (Failed to fetch). Verifique se o seu projeto Supabase não está pausado, se as credenciais configuradas nos Secrets do AI Studio estão corretas e limpas (sem aspas, espaços ou barras no final) e se o seu navegador não possui adblockers impedindo a requisição.';
+        triggerNotification('Erro de Conexão', errorMsg);
+        throw new Error(errorMsg);
       }
       triggerNotification('Erro de Login', err.message || 'Verifique suas credenciais.');
       throw err;
@@ -463,16 +460,11 @@ export function PortalRouterProvider({
   const signUp = async (email: string, pass: string, name: string, unit: string, role: string, cpf: string) => {
     setSessionLoading(true);
     
-    // Direct simulated mode
     if (!isSupabaseConfigured) {
-      try {
-        const result = await signUpSimulated(email, pass, name, unit, role, cpf);
-        return result;
-      } catch (simErr: any) {
-        throw simErr;
-      } finally {
-        setSessionLoading(false);
-      }
+      const errorMsg = 'Configuração do Supabase pendente. Para realizar o cadastro real no seu banco de dados, adicione as chaves VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nas Configurações (Secrets) do painel lateral do AI Studio.';
+      triggerNotification('Configuração Pendente', errorMsg);
+      setSessionLoading(false);
+      throw new Error(errorMsg);
     }
 
     try {
@@ -567,15 +559,11 @@ export function PortalRouterProvider({
       }
       return data;
     } catch (err: any) {
-      const isConnectionError = err.message?.includes('Failed to fetch') || err.message?.includes('fetch failed');
+      const isConnectionError = err.message?.includes('Failed to fetch') || err.message?.includes('fetch failed') || err.message?.includes('NetworkError');
       if (isConnectionError) {
-        console.warn('Conexão Supabase inacessível no cadastro. Efetuando fallback para cadastro simulado local.');
-        try {
-          const result = await signUpSimulated(email, pass, name, unit, role, cpf);
-          return result;
-        } catch (simErr: any) {
-          throw simErr;
-        }
+        const errorMsg = 'Erro de rede ao conectar com o Supabase (Failed to fetch). Verifique se o seu projeto Supabase não está pausado, se as credenciais configuradas nos Secrets do AI Studio estão corretas e limpas (sem aspas, espaços ou barras no final) e se o seu navegador não possui adblockers impedindo a requisição.';
+        triggerNotification('Erro de Conexão', errorMsg);
+        throw new Error(errorMsg);
       }
       triggerNotification('Falha no Cadastro', err.message || 'Não foi possível registrar usuário.');
       throw err;

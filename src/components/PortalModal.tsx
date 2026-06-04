@@ -608,7 +608,20 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
       
       onClose();
     } catch (err: any) {
-      alert(`Erro ao cadastrar usuário: ${err.message || 'Verifique se o e-mail ou o CPF já existem.'}`);
+      const isFetchErr = err.message?.toLowerCase().includes('failed to fetch') || 
+                         err.message?.toLowerCase().includes('fetch failed') || 
+                         err.message?.toLowerCase().includes('networkerr');
+      if (isFetchErr) {
+        alert(
+          `🔴 ERRO DE CONEXÃO COM O SUPABASE (Failed to Fetch)\n\n` +
+          `Isso ocorre quando a requisição do seu navegador para as APIs do Supabase é bloqueada ou falha. Por favor, verifique:\n\n` +
+          `1. O SEU PROJETO SUPABASE ESTÁ PAUSADO? (Muito comum na versão gratuita se ficou alguns dias sem uso). Acesse http://supabase.com/dashboard, entre no seu projeto e clique para Restaurar/Reativar (Restore).\n\n` +
+          `2. ADBLOCKER OU EXTENSÃO DE PRIVACIDADE: Extensões como uBlock Origin, Privacy Badger ou Brave Shields costumam bloquear o domínio do Supabase. Desative-os temporariamente para esta página ou use uma Aba Anônima.\n\n` +
+          `3. CHAVES CONFIGURADAS CORRETAMENTE: Verifique nas Configurações (Secrets) do seu projeto no AI Studio se os valores de VITE_SUPABASE_URL (Ex: https://xxxx.supabase.co) e VITE_SUPABASE_ANON_KEY estão gravados de forma limpa, sem aspas, espaços extras ou barras no final.`
+        );
+      } else {
+        alert(`Erro ao cadastrar usuário: ${err.message || 'Verifique se o e-mail ou o CPF já existem.'}`);
+      }
     } finally {
       setLoading(false);
     }
