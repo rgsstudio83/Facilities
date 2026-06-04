@@ -35,8 +35,10 @@ import AreasAtendidas from './components/AreasAtendidas';
 import FAQSection from './components/FAQSection';
 import BlogDashboard from './components/BlogDashboard';
 import { servicePages, cityPages } from './data/seoData';
+import { PortalRouterProvider, usePortalRouter, PortalRouteGuard } from './components/PortalRouter';
 
-export default function App() {
+function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast: any; handleShowToast: any }) {
+  const router = usePortalRouter();
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
   const [isPortalOpen, setIsPortalOpen] = useState(false);
   const [isSupabaseDiagOpen, setIsSupabaseDiagOpen] = useState(false);
@@ -44,16 +46,46 @@ export default function App() {
   const [authenticatedProfile, setAuthenticatedProfile] = useState<string>('admin');
   const [currentUser, setCurrentUser] = useState<{ name: string; profile: string; unit: string } | null>(null);
 
+  // Sync session profile dynamically with global router auth state
+  const currentUserResolved = router.isLoggedIn && router.profile ? {
+    name: router.profile.nome,
+    profile: router.profile.tipo,
+    unit: router.profile.unidade || 'Apto Geral'
+  } : currentUser;
+
+  const authenticatedProfileResolved = router.isLoggedIn && router.profile ? router.profile.tipo : authenticatedProfile;
+
+  // React to route state changes from Supabase Auth Router to automatically show modal dialog views
+  useEffect(() => {
+    const rawPath = router.currentRoute.replace('#', '');
+    if (['login', 'register', 'esqueci-senha', 'alterar-senha'].includes(rawPath)) {
+      setIsPortalOpen(true);
+      setIsAdminDashboardOpen(false);
+    } else if (rawPath.startsWith('dashboard')) {
+      setIsPortalOpen(false);
+      setIsAdminDashboardOpen(true);
+    }
+  }, [router.currentRoute]);
+
+  const handlePortalClose = () => {
+    setIsPortalOpen(false);
+    if (['login', 'register', 'esqueci-senha', 'alterar-senha'].includes(router.currentRoute.replace('#', ''))) {
+      window.location.hash = '#home';
+    }
+  };
+
   const handleLoginSuccess = (username: string, profile: string, unit: string) => {
     setAuthenticatedProfile(profile);
     setCurrentUser({ name: username, profile, unit });
     setIsPortalOpen(false);
-    setIsAdminDashboardOpen(true);
+    window.location.hash = '#dashboard';
   };
 
   const handleLogout = () => {
+    router.logout();
     setCurrentUser(null);
     setAuthenticatedProfile('admin');
+    window.location.hash = '#home';
   };
 
   // SPA Routing and Local SEO State
@@ -137,9 +169,6 @@ export default function App() {
     metaDesc.setAttribute('content', description);
   }, [viewType, viewSlug]);
 
-  // Simulated dynamic toast notification list
-  const [toast, setToast] = useState<{ id: string; headline: string; text: string } | null>(null);
-
   // Simulated WhatsApp FAB widget
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ sender: 'agent' | 'user'; text: string }[]>([
@@ -148,14 +177,6 @@ export default function App() {
       text: 'Olá! Sou o assistente virtual da Facilities. Como está a saúde administrativa e financeira do seu condomínio hoje?',
     },
   ]);
-
-  const handleShowToast = (headline: string, text: string) => {
-    const id = Date.now().toString();
-    setToast({ id, headline, text });
-    setTimeout(() => {
-      setToast((prev) => (prev?.id === id ? null : prev));
-    }, 5000);
-  };
 
   const handleAddMessageShowToast = (msg: ContactMessage) => {
     handleShowToast(
@@ -581,7 +602,7 @@ export default function App() {
       {/* ROBUST CLIENT PORTAL MODAL */}
       <PortalModal
         isOpen={isPortalOpen}
-        onClose={() => setIsPortalOpen(false)}
+        onClose={handlePortalClose}
         onShowNotification={handleShowToast}
         onLoginSuccess={handleLoginSuccess}
       />
@@ -593,15 +614,22 @@ export default function App() {
         onShowMessage={handleShowToast}
       />
 
-      {/* FACILITIES EXECUTIVE ADMINISTRATIVE DASHBOARD */}
-      <AdminDashboardModal
-        isOpen={isAdminDashboardOpen}
-        onClose={() => setIsAdminDashboardOpen(false)}
-        onShowMessage={handleShowToast}
-        initialProfile={authenticatedProfile}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-      />
+      {/* FACILITIES EXECUTIVE ADMINISTRATIVE DASHBOARD (PROTECTED NATIVELY WITH THE PORTAL ROUTE GUARD) */}
+      {isAdminDashboardOpen && (
+        <PortalRouteGuard allowedRoute="#dashboard">
+          <AdminDashboardModal
+            isOpen={isAdminDashboardOpen}
+            onClose={() => {
+              setIsAdminDashboardOpen(false);
+              window.location.hash = '#home';
+            }}
+            onShowMessage={handleShowToast}
+            initialProfile={authenticatedProfileResolved}
+            currentUser={currentUserResolved}
+            onLogout={handleLogout}
+          />
+        </PortalRouteGuard>
+      )}
 
       {/* WHATSAPP CHAT POPUP SIMULATION BADGE */}
       <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
@@ -684,5 +712,20 @@ export default function App() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  const [toast, setToast] = useState<{ headline: string; text: string } | null>(null);
+
+  const handleShowToast = (headline: string, text: string) => {
+    setToast({ headline, text });
+    setTimeout(() => setToast(null), 5000);
+  };
+
+  return (
+    <PortalRouterProvider onShowNotification={handleShowToast}>
+      <AppContent toast={toast} setToast={setToast} handleShowToast={handleShowToast} />
+    </PortalRouterProvider>
   );
 }

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { Boleto, Booking, Assembly, Ticket } from '../types';
 import { supabase, isSupabaseConfigured, saveSimulatedData, getSimulatedData } from '../lib/supabaseClient';
+import { usePortalRouter } from './PortalRouter';
 
 interface PortalModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ interface PortalModalProps {
 }
 
 export default function PortalModal({ isOpen, onClose, onShowNotification, onLoginSuccess }: PortalModalProps) {
+  const router = usePortalRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('Roberto Silva');
   const [apartmentCode, setApartmentCode] = useState('Apto 41-B');
@@ -47,7 +49,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [activeTab, setActiveTab] = useState<string>('financeiro');
 
   // Registration & profile states
-  const [formTab, setFormTab] = useState<'login' | 'register'>('login');
+  const [formTab, setFormTab] = useState<'login' | 'register' | 'esqueci-senha' | 'alterar-senha'>('login');
   const [profileType, setProfileType] = useState<string>('Morador');
   const [regName, setRegName] = useState('');
   const [regCpf, setRegCpf] = useState('');
@@ -55,6 +57,52 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [regPassword, setRegPassword] = useState('');
   const [regUnit, setRegUnit] = useState('Apto Geral');
   const [loading, setLoading] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [newPasswordValue, setNewPasswordValue] = useState('');
+
+  // Sync state tab mode based on active router location hash
+  useEffect(() => {
+    const cleanHash = router.currentRoute.replace('#', '');
+    if (cleanHash === 'login') {
+      setFormTab('login');
+    } else if (cleanHash === 'register') {
+      setFormTab('register');
+    } else if (cleanHash === 'esqueci-senha') {
+      setFormTab('esqueci-senha');
+    } else if (cleanHash === 'alterar-senha') {
+      setFormTab('alterar-senha');
+    }
+  }, [router.currentRoute]);
+
+  const handleForgotPasswordSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!recoveryEmail) return;
+    setLoading(true);
+    try {
+      await router.resetPassword(recoveryEmail);
+      setFormTab('login');
+      window.location.hash = '#login';
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newPasswordValue) return;
+    setLoading(true);
+    try {
+      await router.updatePassword(newPasswordValue);
+      setFormTab('login');
+      window.location.hash = '#login';
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
   const [usersDb, setUsersDb] = useState<{cpf: string, email: string, pass: string, name: string, unit: string, profile: string}[]>(() => {
     const saved = localStorage.getItem('facilities_portal_users');
     if (saved) {
@@ -479,115 +527,56 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
     }
 
     setLoading(true);
-    const cleanCpf = cpf.replace(/\D/g, '');
+    try {
+      let loginEmail = cpf;
+      // Se não possui @, assume CPF e pesquisa e-mail cadastrado correspondente na tabela de perfis
+      if (!loginEmail.includes('@')) {
+        const cleanCpfVal = cpf.replace(/\D/g, '');
+        const { data: profileRecord } = await supabase
+          .from('perfis')
+          .select('email')
+          .eq('cpf', cleanCpfVal)
+          .maybeSingle();
 
-    // 1. If Supabase is configured, authenticate with real-world credentials!
-    if (supabase && isSupabaseConfigured) {
-      try {
-        let loginEmail = cpf;
-        // If not a valid email, look up in the local state or generate dummy email pattern
-        if (!loginEmail.includes('@')) {
-          const matchedLocal = usersDb.find(u => u.cpf.replace(/\D/g, '') === cleanCpf);
-          if (matchedLocal) {
-            loginEmail = matchedLocal.email;
-          } else {
-            loginEmail = `${cleanCpf}@facilities.com.br`;
-          }
+        if (profileRecord && profileRecord.email) {
+          loginEmail = profileRecord.email;
+        } else {
+          loginEmail = `${cleanCpfVal || 'unknown'}@facilities.com.br`;
         }
-
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: loginEmail,
-          password: password,
-        });
-
-        if (error) {
-          console.warn('Real Auth failed, checking local database fallback:', error.message);
-        } else if (data && data.user) {
-          // Fetch from perfis table
-          let actualName = '';
-          let actualUnit = '';
-          let actualProfile = '';
-
-          try {
-            // First try looking up by auth_user_id or id
-            const { data: dbProfile, error: profileErr } = await supabase
-              .from('perfis')
-              .select('*')
-              .or(`auth_user_id.eq.${data.user.id},id.eq.${data.user.id}`)
-              .maybeSingle();
-
-            if (dbProfile && !profileErr) {
-              actualName = dbProfile.nome;
-              actualUnit = dbProfile.unidade || '';
-              
-              // Handle tipo vs perfil mapping
-              const rawTipo = dbProfile.tipo || dbProfile.perfil || 'Morador';
-              actualProfile = rawTipo.charAt(0).toUpperCase() + rawTipo.slice(1);
-              if (actualProfile === 'Sindico') actualProfile = 'Síndico';
-              if (actualProfile === 'Subsindico') actualProfile = 'Subsíndico';
-              if (actualProfile === 'Proprietario') actualProfile = 'Proprietário';
-            }
-          } catch (profileFetchErr) {
-            console.error('Error fetching profile from tables:', profileFetchErr);
-          }
-
-          const meta = data.user.user_metadata || {};
-          
-          const profileName = actualName || meta.full_name || data.user.email || 'Usuário Autenticado';
-          const profileUnit = actualUnit || meta.unit || 'Apto 41-B';
-          const profileVal = actualProfile || meta.profile || 'Morador';
-
-          setUsername(profileName);
-          setApartmentCode(profileUnit);
-          setProfileType(profileVal);
-          setLoading(false);
-          onShowNotification('Acesso Concedido!', `Seja bem-vindo de volta, ${profileName} (${profileVal})!`);
-          if (onLoginSuccess) {
-            onLoginSuccess(profileName, profileVal, profileUnit);
-          } else {
-            setIsLoggedIn(true);
-          }
-          return;
-        }
-      } catch (err) {
-        console.error('Erro de conexão Supabase Auth:', err);
       }
-    }
 
-    // 2. Private simulated user directory lookup
-    const found = usersDb.find(u => {
-      const uCleanCpf = u.cpf.replace(/\D/g, '');
-      const isCpfMatch = uCleanCpf === cleanCpf && cleanCpf !== '';
-      const isEmailMatch = u.email.toLowerCase() === cpf.toLowerCase();
-      return (isCpfMatch || isEmailMatch) && u.pass === password;
-    });
+      console.log('Autenticando via Supabase Auth (signInWithPassword):', loginEmail);
+      const data = await router.login(loginEmail, password);
+      
+      if (data && data.user) {
+        // Encontrar profile para carregar dados na sessão
+        const { data: dbProfile } = await supabase
+          .from('perfis')
+          .select('*')
+          .eq('auth_user_id', data.user.id)
+          .maybeSingle();
 
-    setLoading(false);
+        const resolvedProfile = dbProfile || {
+          nome: data.user.user_metadata?.full_name || 'Usuário Autenticado',
+          unidade: data.user.user_metadata?.unit || 'Apto Geral',
+          tipo: data.user.user_metadata?.profile || 'Morador'
+        };
 
-    if (found) {
-      setUsername(found.name);
-      setApartmentCode(found.unit);
-      setProfileType(found.profile);
-      onShowNotification('Acesso Concedido!', `Seja bem-vindo de volta, ${found.name} (${found.profile}).`);
-      if (onLoginSuccess) {
-        onLoginSuccess(found.name, found.profile, found.unit);
-      } else {
-        setIsLoggedIn(true);
-      }
-    } else {
-      if (cpf === '123' && password === '123') {
-        setUsername('Roberto Silva');
-        setApartmentCode('Apto 41-B');
-        setProfileType('Morador');
-        onShowNotification('Conexão Simulada!', 'Sessão iniciada como Morador Roberto Silva.');
+        setUsername(resolvedProfile.nome);
+        setApartmentCode(resolvedProfile.unidade || 'Apto Geral');
+        setProfileType(resolvedProfile.tipo || 'Morador');
+
         if (onLoginSuccess) {
-          onLoginSuccess('Roberto Silva', 'Morador', 'Apto 41-B');
+          onLoginSuccess(resolvedProfile.nome, resolvedProfile.tipo || 'Morador', resolvedProfile.unidade || 'Apto Geral');
         } else {
           setIsLoggedIn(true);
         }
-      } else {
-        alert('Credenciais incorretas ou conta não localizada.');
       }
+      onClose();
+    } catch (err: any) {
+      alert(`Falha na Autenticação Supabase Auth: ${err.message || 'Verifique seus dados.'}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -599,214 +588,30 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
     }
 
     setLoading(true);
+    try {
+      console.log('Efetuando registro e sincronização pela central Supabase Auth...');
+      const data = await router.signUp(
+        regEmail.trim(),
+        regPassword,
+        regName.trim(),
+        regUnit.trim(),
+        profileType,
+        regCpf.trim()
+      );
 
-    const targetProfileType = profileType;
-
-    // 1. If Supabase is configured, register user in Supabase Auth backend
-    if (supabase && isSupabaseConfigured) {
-      try {
-        console.log('Solicitando signUp no Supabase Auth para:', regEmail.trim());
-        const { data, error } = await supabase.auth.signUp({
-          email: regEmail.trim(),
-          password: regPassword,
-          options: {
-            data: {
-              full_name: regName.trim(),
-              cpf: regCpf.trim(),
-              unit: regUnit.trim(),
-              profile: targetProfileType
-            }
-          }
-        });
-
-        if (error) {
-          alert(`Incompatibilidade no cadastro do Supabase Auth: ${error.message}`);
-          setLoading(false);
-          return;
-        }
-        
-        console.log('Usuário registrado com sucesso no Supabase Auth:', data.user);
-
-        // Try to authenticate immediately to establish an active session to resolve Row Level Security (RLS) constraints
-        let sessionUser = data.user;
-        let isSessionEstablished = false;
-        try {
-          console.log('Efetuando signIn de confirmação pós-cadastro...');
-          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-            email: regEmail.trim(),
-            password: regPassword
-          });
-
-          if (signInErr) {
-            console.warn('Aviso na autenticação pós-cadastro (pode exigir confirmação de e-mail):', signInErr.message);
-          } else {
-            console.log('Autenticação de aprovação pós-cadastro bem-sucedida.');
-            isSessionEstablished = true;
-            if (signInData?.user) {
-              sessionUser = signInData.user;
-            }
-          }
-        } catch (signInErr) {
-          console.warn('Erro ao processar autenticação imediata:', signInErr);
-        }
-
-        // Store registration info in the 'perfis' table as requested!
-        if (sessionUser) {
-          // Normalize matching values
-          let tipoValue = targetProfileType.toLowerCase();
-          if (tipoValue === 'porteiro') tipoValue = 'colaborador';
-          if (tipoValue === 'subsíndico') tipoValue = 'subsindico';
-          if (tipoValue === 'síndico') tipoValue = 'sindico';
-          if (tipoValue === 'proprietário') tipoValue = 'proprietario';
-          if (!['administrador', 'colaborador', 'sindico', 'subsindico', 'conselheiro', 'morador', 'proprietario'].includes(tipoValue)) {
-            tipoValue = 'morador';
-          }
-
-          console.log('Gravando perfil na tabela "perfis"...');
-          let successInserted = false;
-
-          // Attempt A: Exact match with the DDL Schema for 'perfis' table (id, nome, cpf, email, unidade, perfil)
-          try {
-            const { error: insertSimError } = await supabase.from('perfis').insert({
-              id: sessionUser.id,
-              nome: regName.trim(),
-              cpf: regCpf.trim(),
-              email: regEmail.trim(),
-              unidade: regUnit.trim(),
-              perfil: targetProfileType
-            });
-
-            if (!insertSimError) {
-              console.log('Perfil gravado com sucesso no formato da tabela "perfis".');
-              successInserted = true;
-            } else {
-              console.warn('Falhar ao gravar perfil com formato oficial do DDL:', insertSimError.message);
-            }
-          } catch (e: any) {
-            console.warn('Tentativa A gerou exceção:', e);
-          }
-
-          // Attempt B: Fallback Schema with id, auth_user_id, nome, email, tipo, telefone
-          if (!successInserted) {
-            try {
-              const { error: insertError } = await supabase.from('perfis').insert({
-                id: sessionUser.id,
-                auth_user_id: sessionUser.id,
-                nome: regName.trim(),
-                email: regEmail.trim(),
-                tipo: tipoValue,
-                telefone: regCpf.trim()
-              });
-              if (!insertError) {
-                console.log('Perfil gravado sob formato alternativo de produção com id e auth_user_id (Tentativa B).');
-                successInserted = true;
-              } else {
-                console.warn('Falha no formato alternativo de produção (Tentativa B):', insertError.message);
-              }
-            } catch (e: any) {
-              console.warn('Tentativa B gerou exceção:', e);
-            }
-          }
-
-          // Attempt C: Fallback Schema with only auth_user_id
-          if (!successInserted) {
-            try {
-              const { error: insertErrorC } = await supabase.from('perfis').insert({
-                auth_user_id: sessionUser.id,
-                nome: regName.trim(),
-                email: regEmail.trim(),
-                tipo: tipoValue,
-                telefone: regCpf.trim()
-              });
-              if (!insertErrorC) {
-                console.log('Perfil gravado sob formato alternativo sem id personalizado (Tentativa C).');
-                successInserted = true;
-              } else {
-                console.warn('Falha no formato alternativo sem id (Tentativa C):', insertErrorC.message);
-              }
-            } catch (e: any) {
-              console.warn('Tentativa C gerou exceção:', e);
-            }
-          }
-
-          // Attempt D: Hybrid column mapping fallback (auth_user_id, perfil, nome, email, tipo)
-          if (!successInserted) {
-            try {
-              const { error: insertErrorD } = await supabase.from('perfis').insert({
-                auth_user_id: sessionUser.id,
-                perfil: targetProfileType,
-                nome: regName.trim(),
-                email: regEmail.trim(),
-                tipo: tipoValue
-              });
-              if (!insertErrorD) {
-                console.log('Perfil gravado usando formato híbrido alternativo (Tentativa D).');
-                successInserted = true;
-              } else {
-                console.warn('Falha no formato híbrido alternativo (Tentativa D):', insertErrorD.message);
-              }
-            } catch (e: any) {
-              console.warn('Tentativa D gerou exceção:', e);
-            }
-          }
-
-          if (!successInserted) {
-            console.error('Infelizmente, todas as tentativas de inserção assíncrona na tabela "perfis" falharam devido a incompatibilidade de colunas no Supabase configurado.');
-          }
-        }
-      } catch (err: any) {
-        console.error('Falha de comunicação assíncrona com os servidores do Supabase Auth:', err);
-      }
+      // Reset form variables
+      setRegName('');
+      setRegCpf('');
+      setRegEmail('');
+      setRegPassword('');
+      setRegUnit('Apto Geral');
+      
+      onClose();
+    } catch (err: any) {
+      alert(`Erro ao cadastrar usuário: ${err.message || 'Verifique se o e-mail ou o CPF já existem.'}`);
+    } finally {
+      setLoading(false);
     }
-
-    // 2. Sync to secure private directory (always maintain local fallback state for smooth UI navigation)
-    const newUser = {
-      cpf: regCpf.trim(),
-      email: regEmail.trim(),
-      pass: regPassword,
-      name: regName.trim(),
-      unit: regUnit.trim(),
-      profile: targetProfileType
-    };
-
-    setUsersDb(prev => {
-      const updated = [...prev, newUser];
-      localStorage.setItem('facilities_portal_users', JSON.stringify(updated));
-      return updated;
-    });
-    setLoading(false);
-
-    onShowNotification(
-      'Cadastro Concluidor!',
-      `Bem-vindo, ${regName.trim()}! Sua conta foi ativada e autenticada.`
-    );
-
-    // Auto-login and sync profile states
-    const fName = regName.trim();
-    const fUnit = regUnit.trim();
-    const fProfile = targetProfileType;
-
-    setUsername(fName);
-    setApartmentCode(fUnit);
-    setProfileType(fProfile);
-
-    if (onLoginSuccess) {
-      onLoginSuccess(fName, fProfile, fUnit);
-    } else {
-      setIsLoggedIn(true);
-    }
-
-    // Reset registration form inputs
-    setRegName('');
-    setRegCpf('');
-    setRegEmail('');
-    setRegPassword('');
-    setRegUnit('Apto Geral');
-
-    onShowNotification(
-      'Conta Criada com Sucesso!',
-      `Tudo pronto, ${regName}! Por favor, clique em "Entrar no Condomínio" para autenticar e acessar o painel do seu perfil de ${targetProfileType}.`
-    );
   };
 
   const handleLogout = async () => {
@@ -1054,34 +859,42 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
             <div className="w-full max-w-sm bg-white p-6 md:p-8 rounded-2xl border border-[#cfdbec] shadow-md flex flex-col">
               
               {/* Form Mode Selector tabs */}
-              <div className="flex border-b border-gray-200 mb-5 font-sans text-xs font-bold uppercase tracking-wider">
-                <button
-                  id="tab-mode-login"
-                  type="button"
-                  onClick={() => setFormTab('login')}
-                  className={`flex-1 pb-2.5 text-center transition-all border-b-2 cursor-pointer ${
-                    formTab === 'login'
-                      ? 'border-[#af101a] text-[#af101a] font-extrabold'
-                      : 'border-transparent text-secondary hover:text-primary'
-                  }`}
-                >
-                  Entrar
-                </button>
-                <button
-                  id="tab-mode-register"
-                  type="button"
-                  onClick={() => setFormTab('register')}
-                  className={`flex-1 pb-2.5 text-center transition-all border-b-2 cursor-pointer ${
-                    formTab === 'register'
-                      ? 'border-[#af101a] text-[#af101a] font-extrabold'
-                      : 'border-transparent text-secondary hover:text-primary'
-                  }`}
-                >
-                  Criar Conta
-                </button>
-              </div>
+              {(formTab === 'login' || formTab === 'register') && (
+                <div className="flex border-b border-gray-200 mb-5 font-sans text-xs font-bold uppercase tracking-wider">
+                  <button
+                    id="tab-mode-login"
+                    type="button"
+                    onClick={() => {
+                      setFormTab('login');
+                      window.location.hash = '#login';
+                    }}
+                    className={`flex-1 pb-2.5 text-center transition-all border-b-2 cursor-pointer ${
+                      formTab === 'login'
+                        ? 'border-[#af101a] text-[#af101a] font-extrabold'
+                        : 'border-transparent text-secondary hover:text-primary'
+                    }`}
+                  >
+                    Entrar
+                  </button>
+                  <button
+                    id="tab-mode-register"
+                    type="button"
+                    onClick={() => {
+                      setFormTab('register');
+                      window.location.hash = '#register';
+                    }}
+                    className={`flex-1 pb-2.5 text-center transition-all border-b-2 cursor-pointer ${
+                      formTab === 'register'
+                        ? 'border-[#af101a] text-[#af101a] font-extrabold'
+                        : 'border-transparent text-secondary hover:text-primary'
+                    }`}
+                  >
+                    Criar Conta
+                  </button>
+                </div>
+              )}
 
-              {formTab === 'login' ? (
+              {formTab === 'login' && (
                 <form onSubmit={handleCustomLogin} className="space-y-4">
                   <h5 className="font-bold text-center text-xs font-display uppercase tracking-wider text-[#101c29]">Acesso Certificado</h5>
                   
@@ -1099,7 +912,19 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                   </div>
 
                   <div className="space-y-1">
-                    <label htmlFor="portal-pass-input" className="text-[10px] font-bold text-[#101c29] uppercase block">Senha de Acesso</label>
+                    <div className="flex justify-between items-center">
+                      <label htmlFor="portal-pass-input" className="text-[10px] font-bold text-[#101c29] uppercase block">Senha de Acesso</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormTab('esqueci-senha');
+                          window.location.hash = '#esqueci-senha';
+                        }}
+                        className="text-[10px] text-gray-500 hover:text-primary hover:underline font-bold cursor-pointer"
+                      >
+                        Esqueceu a senha?
+                      </button>
+                    </div>
                     <input
                       id="portal-pass-input"
                       type="password"
@@ -1115,7 +940,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                     id="portal-form-submit"
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-3 rounded-lg font-bold transition-all text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-3 rounded-lg font-bold transition-all text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 animate-pulse-subtle"
                   >
                     {loading ? (
                       <>
@@ -1127,7 +952,9 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                     )}
                   </button>
                 </form>
-              ) : (
+              )}
+
+              {formTab === 'register' && (
                 <form onSubmit={handleRegisterSubmit} className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                   <h5 className="font-bold text-center text-xs font-display uppercase tracking-wider text-[#101c29] mb-1">Novo Cadastro</h5>
                   
@@ -1216,6 +1043,87 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                       </>
                     ) : (
                       'Criar Conta & Acessar'
+                    )}
+                  </button>
+                </form>
+              )}
+
+              {formTab === 'esqueci-senha' && (
+                <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+                  <h5 className="font-bold text-center text-xs font-display uppercase tracking-wider text-[#101c29]">Recuperar Minha Senha</h5>
+                  
+                  <div className="space-y-1">
+                    <label htmlFor="recovery-email" className="text-[10px] font-bold text-[#101c29] uppercase block">Seu E-mail Cadastrado</label>
+                    <input
+                      id="recovery-email"
+                      type="email"
+                      required
+                      value={recoveryEmail}
+                      onChange={(e) => setRecoveryEmail(e.target.value)}
+                      placeholder="digite@seuemail.com"
+                      className="w-full bg-[#f8f9ff] border border-gray-250 outline-none focus:border-primary p-3 rounded-lg text-sm text-[#101c29]"
+                    />
+                  </div>
+
+                  <button
+                    id="recovery-submit-btn"
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-3 rounded-lg font-bold transition-all text-xs cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></span>
+                        Enviando...
+                      </>
+                    ) : (
+                      'Enviar E-mail de Recuperação'
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormTab('login');
+                      window.location.hash = '#login';
+                    }}
+                    className="w-full text-center text-xs text-gray-400 hover:text-black hover:underline font-bold mt-2 cursor-pointer"
+                  >
+                    Voltar para o Login
+                  </button>
+                </form>
+              )}
+
+              {formTab === 'alterar-senha' && (
+                <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+                  <h5 className="font-bold text-center text-xs font-display uppercase tracking-wider text-[#101c29]">Registrar Nova Senha</h5>
+                  
+                  <div className="space-y-1">
+                    <label htmlFor="reset-new-password" className="text-[10px] font-bold text-[#101c29] uppercase block">Nova Senha</label>
+                    <input
+                      id="reset-new-password"
+                      type="password"
+                      required
+                      value={newPasswordValue}
+                      onChange={(e) => setNewPasswordValue(e.target.value)}
+                      placeholder="Crie uma nova senha de acesso"
+                      className="w-full bg-[#f8f9ff] border border-gray-250 outline-none focus:border-primary p-3 rounded-lg text-sm text-[#101c29]"
+                    />
+                  </div>
+
+                  <button
+                    id="reset-submit-btn"
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-3 rounded-lg font-bold transition-all text-xs cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></span>
+                        Atualizando...
+                      </>
+                    ) : (
+                      'Salvar Nova Senha'
                     )}
                   </button>
                 </form>

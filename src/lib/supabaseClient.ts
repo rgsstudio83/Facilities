@@ -11,10 +11,11 @@ export const isSupabaseConfigured = Boolean(
   supabaseAnonKey !== 'your-anon-public-key'
 );
 
-// Gracefully initialize Supabase client or fallback to a custom simulated database in localStorage
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+// Gracefully initialize Supabase client or fallback to placeholder strings to prevent typescript null errors
+const finalUrl = isSupabaseConfigured && supabaseUrl ? supabaseUrl : 'https://placeholder-project-id.supabase.co';
+const finalKey = isSupabaseConfigured && supabaseAnonKey ? supabaseAnonKey : 'placeholder-anon-key';
+
+export const supabase = createClient(finalUrl, finalKey);
 
 // Simulated storage handlers for when Supabase is not configured yet
 export const getSimulatedData = <T>(key: string): T[] => {
@@ -78,11 +79,13 @@ CREATE TABLE IF NOT EXISTS tickets (
 -- 5. Tabela de Perfis de Usuários
 CREATE TABLE IF NOT EXISTS perfis (
   id UUID PRIMARY KEY,
+  auth_user_id UUID NOT NULL,
   nome TEXT NOT NULL,
   cpf TEXT,
   email TEXT NOT NULL,
   unidade TEXT,
-  perfil TEXT NOT NULL,
+  tipo TEXT NOT NULL, -- administrador, colaborador, sindico, etc.
+  perfil TEXT, -- fallback/alias
   data_cadastro TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
