@@ -42,6 +42,7 @@ interface AdminDashboardModalProps {
   isOpen: boolean;
   onClose: () => void;
   onShowMessage: (title: string, desc: string) => void;
+  initialProfile?: string;
 }
 
 // Data Interfaces
@@ -106,12 +107,32 @@ interface Encomenda {
   status: 'Aguardando' | 'Retirada';
 }
 
-export default function AdminDashboardModal({ isOpen, onClose, onShowMessage }: AdminDashboardModalProps) {
+export default function AdminDashboardModal({ isOpen, onClose, onShowMessage, initialProfile }: AdminDashboardModalProps) {
   // Profiles Base Setup
   const [activeProfile, setActiveProfile] = useState<'admin' | 'colaborador' | 'sindico' | 'subsindico' | 'conselheiro' | 'proprietario' | 'morador' | 'porteiro'>('admin');
   const [activeSubPage, setActiveSubPage] = useState<string>('dashboard');
   const [selectedCondoId, setSelectedCondoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Sync initial authenticated profile when modal opens
+  useEffect(() => {
+    if (isOpen && initialProfile) {
+      const normalized = initialProfile.toLowerCase()
+        .replace('síndico', 'sindico')
+        .replace('subsíndico', 'subsindico')
+        .replace('proprietário', 'proprietario')
+        .replace('conselheiro', 'conselheiro')
+        .replace('porteiro', 'porteiro')
+        .replace('administrador', 'admin')
+        .replace('colaborador', 'colaborador')
+        .replace('morador', 'morador');
+      
+      const validProfiles = ['admin', 'colaborador', 'sindico', 'subsindico', 'conselheiro', 'proprietario', 'morador', 'porteiro'];
+      if (validProfiles.includes(normalized)) {
+        setActiveProfile(normalized as any);
+      }
+    }
+  }, [isOpen, initialProfile]);
 
   // Simulated Database states
   const [condos, setCondos] = useState<Condominio[]>([

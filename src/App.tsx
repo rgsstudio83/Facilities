@@ -41,6 +41,13 @@ export default function App() {
   const [isPortalOpen, setIsPortalOpen] = useState(false);
   const [isSupabaseDiagOpen, setIsSupabaseDiagOpen] = useState(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
+  const [authenticatedProfile, setAuthenticatedProfile] = useState<string>('admin');
+
+  const handleLoginSuccess = (username: string, profile: string, unit: string) => {
+    setAuthenticatedProfile(profile);
+    setIsPortalOpen(false);
+    setIsAdminDashboardOpen(true);
+  };
 
   // SPA Routing and Local SEO State
   const [currentPath, setCurrentPath] = useState('home'); // #home, #servico/[slug], #local/[slug], #blog, #faq
@@ -420,20 +427,20 @@ export default function App() {
                           <div className="space-y-2 relative z-10 font-sans">
                             <p className="text-[9px] text-gray-400 uppercase tracking-widest font-bold px-0.5">Atalhos Principais</p>
                             <div className="grid grid-cols-2 gap-2">
-                              <div className="bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
-                                <span className="block text-sm mb-0.5">📅</span>
+                              <div className="group bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
+                                <span className="block text-sm mb-0.5 transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-110 group-hover:rotate-6">📅</span>
                                 <span className="block text-[8.5px] font-bold text-gray-200">Reservas Áreas</span>
                               </div>
-                              <div className="bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
-                                <span className="block text-sm mb-0.5">📊</span>
+                              <div className="group bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
+                                <span className="block text-sm mb-0.5 transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-110 group-hover:rotate-6">📊</span>
                                 <span className="block text-[8.5px] font-bold text-gray-200">Finanças Cond.</span>
                               </div>
-                              <div className="bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
-                                <span className="block text-sm mb-0.5">✉️</span>
+                              <div className="group bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
+                                <span className="block text-sm mb-0.5 transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-110 group-hover:rotate-6">✉️</span>
                                 <span className="block text-[8.5px] font-bold text-gray-200">Mural Sindical</span>
                               </div>
-                              <div className="bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
-                                <span className="block text-sm mb-0.5">📋</span>
+                              <div className="group bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
+                                <span className="block text-sm mb-0.5 transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-110 group-hover:rotate-6">📋</span>
                                 <span className="block text-[8.5px] font-bold text-gray-200">Atas & Despesas</span>
                               </div>
                             </div>
@@ -441,16 +448,16 @@ export default function App() {
 
                           {/* Bottom Tab Simulation */}
                           <div className="border-t border-white/10 pt-2 pb-0.5 mt-auto flex justify-around text-[10px] text-gray-400 relative z-10 font-sans">
-                            <span className="text-[#ff3c53] font-extrabold flex flex-col items-center gap-0.5 cursor-pointer">
-                              <span className="text-[11px]">🏠</span>
+                            <span className="group text-[#ff3c53] font-semibold flex flex-col items-center gap-0.5 cursor-pointer">
+                              <span className="text-[11px] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-105">🏠</span>
                               <span className="text-[8.5px]">Início</span>
                             </span>
-                            <span className="hover:text-white flex flex-col items-center gap-0.5 cursor-pointer">
-                              <span className="text-[11px]">🔔</span>
+                            <span className="group hover:text-white flex flex-col items-center gap-0.5 cursor-pointer transition-colors duration-200">
+                              <span className="text-[11px] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-105">🔔</span>
                               <span className="text-[8.5px]">Avisos</span>
                             </span>
-                            <span className="hover:text-white flex flex-col items-center gap-0.5 cursor-pointer">
-                              <span className="text-[11px]">👤</span>
+                            <span className="group hover:text-white flex flex-col items-center gap-0.5 cursor-pointer transition-colors duration-200">
+                              <span className="text-[11px] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:scale-105">👤</span>
                               <span className="text-[8.5px]">Minha Área</span>
                             </span>
                           </div>
@@ -569,6 +576,7 @@ export default function App() {
         isOpen={isPortalOpen}
         onClose={() => setIsPortalOpen(false)}
         onShowNotification={handleShowToast}
+        onLoginSuccess={handleLoginSuccess}
       />
 
       {/* SUPABASE CONNECTION AND DEVS TOOL DIAG PANEL */}
@@ -583,6 +591,7 @@ export default function App() {
         isOpen={isAdminDashboardOpen}
         onClose={() => setIsAdminDashboardOpen(false)}
         onShowMessage={handleShowToast}
+        initialProfile={authenticatedProfile}
       />
 
       {/* WHATSAPP CHAT POPUP SIMULATION BADGE */}

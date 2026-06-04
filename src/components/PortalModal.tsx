@@ -35,9 +35,10 @@ interface PortalModalProps {
   isOpen: boolean;
   onClose: () => void;
   onShowNotification: (headline: string, text: string) => void;
+  onLoginSuccess?: (username: string, profile: string, unit: string) => void;
 }
 
-export default function PortalModal({ isOpen, onClose, onShowNotification }: PortalModalProps) {
+export default function PortalModal({ isOpen, onClose, onShowNotification, onLoginSuccess }: PortalModalProps) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('Roberto Silva');
   const [apartmentCode, setApartmentCode] = useState('Apto 41-B');
@@ -453,15 +454,21 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
 
   // Handle simulated Quick Login
   const handleDemoLogin = (role: 'morador' | 'sindico') => {
-    if (role === 'sindico') {
-      setUsername('Cristhiane Xavier');
-      setApartmentCode('Síndico Profissional');
-    } else {
-      setUsername('Roberto Silva');
-      setApartmentCode('Apto 41-B');
-    }
-    setIsLoggedIn(true);
+    const dName = role === 'sindico' ? 'Cristhiane Xavier' : 'Roberto Silva';
+    const dUnit = role === 'sindico' ? 'Síndico Profissional' : 'Apto 41-B';
+    const dProfile = role === 'sindico' ? 'Síndico' : 'Morador';
+
+    setUsername(dName);
+    setApartmentCode(dUnit);
+    setProfileType(dProfile);
+
     onShowNotification('Login efetuado!', 'Bem-vindo ao painel demonstrativo Facilities.');
+
+    if (onLoginSuccess) {
+      onLoginSuccess(dName, dProfile, dUnit);
+    } else {
+      setIsLoggedIn(true);
+    }
   };
 
   const handleCustomLogin = async (e: FormEvent) => {
@@ -533,9 +540,13 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
           setUsername(profileName);
           setApartmentCode(profileUnit);
           setProfileType(profileVal);
-          setIsLoggedIn(true);
           setLoading(false);
           onShowNotification('Acesso Concedido!', `Seja bem-vindo de volta, ${profileName} (${profileVal})!`);
+          if (onLoginSuccess) {
+            onLoginSuccess(profileName, profileVal, profileUnit);
+          } else {
+            setIsLoggedIn(true);
+          }
           return;
         }
       } catch (err) {
@@ -557,15 +568,23 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
       setUsername(found.name);
       setApartmentCode(found.unit);
       setProfileType(found.profile);
-      setIsLoggedIn(true);
       onShowNotification('Acesso Concedido!', `Seja bem-vindo de volta, ${found.name} (${found.profile}).`);
+      if (onLoginSuccess) {
+        onLoginSuccess(found.name, found.profile, found.unit);
+      } else {
+        setIsLoggedIn(true);
+      }
     } else {
       if (cpf === '123' && password === '123') {
         setUsername('Roberto Silva');
         setApartmentCode('Apto 41-B');
         setProfileType('Morador');
-        setIsLoggedIn(true);
         onShowNotification('Conexão Simulada!', 'Sessão iniciada como Morador Roberto Silva.');
+        if (onLoginSuccess) {
+          onLoginSuccess('Roberto Silva', 'Morador', 'Apto 41-B');
+        } else {
+          setIsLoggedIn(true);
+        }
       } else {
         alert('Credenciais incorretas ou conta não localizada.');
       }
@@ -750,23 +769,32 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
       profile: targetProfileType
     };
 
-    setUsersDb(prev => [...prev, newUser]);
+    setUsersDb(prev => {
+      const updated = [...prev, newUser];
+      localStorage.setItem('facilities_portal_users', JSON.stringify(updated));
+      return updated;
+    });
     setLoading(false);
 
-    // Sign out from Supabase if we were temporarily signed in during the registration steps
-    if (supabase && isSupabaseConfigured) {
-      try {
-        await supabase.auth.signOut();
-      } catch (signOutErr) {
-        console.warn('Erro ao limpar sessão de cadastro no Supabase:', signOutErr);
-      }
-    }
+    onShowNotification(
+      'Cadastro Concluidor!',
+      `Bem-vindo, ${regName.trim()}! Sua conta foi ativada e autenticada.`
+    );
 
-    // Prefill login credentials and switch tab
-    setCpf(regCpf.trim());
-    setPassword(regPassword);
-    setFormTab('login');
-    setIsLoggedIn(false);
+    // Auto-login and sync profile states
+    const fName = regName.trim();
+    const fUnit = regUnit.trim();
+    const fProfile = targetProfileType;
+
+    setUsername(fName);
+    setApartmentCode(fUnit);
+    setProfileType(fProfile);
+
+    if (onLoginSuccess) {
+      onLoginSuccess(fName, fProfile, fUnit);
+    } else {
+      setIsLoggedIn(true);
+    }
 
     // Reset registration form inputs
     setRegName('');
