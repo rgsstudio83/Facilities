@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { Mail, Phone, MapPin, Send, HelpCircle, Check, AlertCircle } from 'lucide-react';
 import { ContactMessage } from '../types';
+import { supabase, isSupabaseConfigured, saveSimulatedData } from '../lib/supabaseClient';
 
 interface ContatoProps {
   onAddMessageShowToast: (message: ContactMessage) => void;
@@ -17,6 +18,7 @@ export default function Contato({ onAddMessageShowToast }: ContatoProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [supabaseStatus, setSupabaseStatus] = useState<'success' | 'fallback' | 'loading' | null>(null);
 
   const validate = () => {
     const tempErrors: Record<string, string> = {};
@@ -34,38 +36,73 @@ export default function Contato({ onAddMessageShowToast }: ContatoProps) {
     return Object.keys(tempErrors).length === 0;
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (validate()) {
       setIsSubmitting(true);
+      setSupabaseStatus('loading');
 
-      // Simulate API submit delay
+      const newMessage: ContactMessage = {
+        nome,
+        email,
+        telefone,
+        mensagem,
+        data: new Date().toLocaleDateString('pt-BR'),
+      };
+
+      try {
+        if (isSupabaseConfigured && supabase) {
+          const { error } = await supabase
+            .from('contact_messages')
+            .insert([
+              {
+                nome: newMessage.nome,
+                email: newMessage.email,
+                telefone: newMessage.telefone,
+                mensagem: newMessage.mensagem,
+                data: newMessage.data
+              }
+            ]);
+
+          if (error) {
+            console.warn('Supabase insert failed, using fallback storage:', error.message);
+            saveSimulatedData<ContactMessage>('contact_messages', newMessage);
+            setSupabaseStatus('fallback');
+          } else {
+            console.log('Successfully saved to Supabase contact_messages');
+            setSupabaseStatus('success');
+          }
+        } else {
+          // Fallback to simulation mode if keys not defined
+          saveSimulatedData<ContactMessage>('contact_messages', newMessage);
+          setSupabaseStatus('fallback');
+        }
+      } catch (err) {
+        console.error('Database connection error, falling back locally:', err);
+        saveSimulatedData<ContactMessage>('contact_messages', newMessage);
+        setSupabaseStatus('fallback');
+      }
+
+      onAddMessageShowToast(newMessage);
+
+      setIsSubmitting(false);
+      setIsSuccess(true);
+
+      // Reset form
+      setNome('');
+      setEmail('');
+      setTelefone('');
+      setMensagem('');
+      setAgreed(false);
+
+      // Clear states after 6 seconds
       setTimeout(() => {
-        const newMessage: ContactMessage = {
-          nome,
-          email,
-          telefone,
-          mensagem,
-          data: new Date().toLocaleDateString('pt-BR'),
-        };
-
-        onAddMessageShowToast(newMessage);
-
-        setIsSubmitting(false);
-        setIsSuccess(true);
-
-        // Reset form
-        setNome('');
-        setEmail('');
-        setTelefone('');
-        setMensagem('');
-        setAgreed(false);
-
-        // Clear success message after 5 seconds
-        setTimeout(() => setIsSuccess(false), 5000);
-      }, 1200);
+        setIsSuccess(false);
+        setSupabaseStatus(null);
+      }, 6000);
     }
   };
+
 
   return (
     <section id="contato" className="py-20 px-4 md:px-12 bg-background border-b border-border-light">
@@ -149,11 +186,23 @@ export default function Contato({ onAddMessageShowToast }: ContatoProps) {
               {isSuccess && (
                 <div id="contact-success-banner" className="bg-success/10 text-success p-4 rounded-xl border border-success/20 flex gap-3 items-start animate-fade-in">
                   <Check className="w-5 h-5 mt-0.5 shrink-0" />
-                  <div>
-                    <h6 className="font-semibold text-sm">Cotação Enviada com Sucesso!</h6>
+                  <div className="flex-1">
+                    <h6 className="font-semibold text-sm">Mensagem de Contato Enviada!</h6>
                     <p className="text-xs text-secondary mt-0.5">
-                      Nossos analistas comerciais de condomínio já receberam a sua solicitação. Responderemos com brevidade!
+                      Nossos analistas de condomínio receberam a sua solicitação comercial.
                     </p>
+                    {supabaseStatus === 'success' && (
+                      <p className="text-[10px] text-green-700 bg-green-50 px-2 py-1 rounded mt-2 inline-flex items-center gap-1 font-semibold border border-green-100">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                        Sincronizado com Supabase (Tabela: contact_messages)
+                      </p>
+                    )}
+                    {supabaseStatus === 'fallback' && (
+                      <p className="text-[10px] text-amber-700 bg-amber-50 px-2 py-1 rounded mt-2 inline-flex items-center gap-1 font-semibold border border-amber-100">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                        Armazenado com sucesso (Modo simulação local ativo)
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

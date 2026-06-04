@@ -19,6 +19,7 @@ import {
   Inbox
 } from 'lucide-react';
 import { Boleto, Booking, Assembly, Ticket } from '../types';
+import { supabase, isSupabaseConfigured, saveSimulatedData, getSimulatedData } from '../lib/supabaseClient';
 
 interface PortalModalProps {
   isOpen: boolean;
@@ -119,6 +120,69 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
   const [newTicketCategory, setNewTicketCategory] = useState<'Manutenção' | 'Limpeza' | 'Barulho' | 'Financeiro' | 'Outros'>('Manutenção');
   const [newTicketDesc, setNewTicketDesc] = useState('');
 
+  // Sincronização inicial com o Supabase
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const fetchSupabaseData = async () => {
+      // Carrega dados offline salvos anteriormente nesta sessão local
+      const localBkgs = getSimulatedData<Booking>('bookings');
+      const localTkts = getSimulatedData<Ticket>('tickets');
+      
+      if (localBkgs.length > 0) {
+        setBookings(prev => {
+          const combined = [...localBkgs, ...prev];
+          return combined.filter((val, index, self) => self.findIndex(t => t.id === val.id) === index);
+        });
+      }
+      if (localTkts.length > 0) {
+        setOcorrencias(prev => {
+          const combined = [...localTkts, ...prev];
+          return combined.filter((val, index, self) => self.findIndex(t => t.id === val.id) === index);
+        });
+      }
+
+      if (!isSupabaseConfigured || !supabase) return;
+
+      try {
+        const { data: dbBkgs, error: errBkgs } = await supabase.from('bookings').select('*');
+        if (dbBkgs && !errBkgs) {
+          const mappedBkgs: Booking[] = dbBkgs.map(b => ({
+            id: b.id,
+            area: b.area,
+            data: b.data,
+            periodo: b.periodo as any,
+            status: b.status as any
+          }));
+          setBookings(prev => {
+            const combined = [...mappedBkgs, ...prev];
+            return combined.filter((val, index, self) => self.findIndex(t => t.id === val.id) === index);
+          });
+        }
+
+        const { data: dbTkts, error: errTkts } = await supabase.from('tickets').select('*');
+        if (dbTkts && !errTkts) {
+          const mappedTkts: Ticket[] = dbTkts.map(t => ({
+            id: t.id,
+            categoria: t.categoria as any,
+            titulo: t.titulo,
+            descricao: t.descricao || '',
+            dataCriacao: t.data_criacao,
+            status: t.status as any
+          }));
+          setOcorrencias(prev => {
+            const combined = [...mappedTkts, ...prev];
+            return combined.filter((val, index, self) => self.findIndex(t => t.id === val.id) === index);
+          });
+        }
+      } catch (err) {
+        console.warn('Falha ao conectar com tabelas do Supabase corporativo:', err);
+      }
+    };
+
+    fetchSupabaseData();
+  }, [isOpen]);
+
   // Handle simulated Quick Login
   const handleDemoLogin = (role: 'morador' | 'sindico') => {
     if (role === 'sindico') {
@@ -161,7 +225,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
     onShowNotification('Sucesso Pix!', 'Boleto considerado pago no demonstrativo local! Saldo compensado.');
   };
 
-  const handleAddBooking = (e: FormEvent) => {
+  const handleAddBooking = async (e: FormEvent) => {
     e.preventDefault();
     if (!newBookingDate) {
       alert('Escolha uma data.');
@@ -176,11 +240,33 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
       status: 'Confirmado'
     };
 
-    setBookings([newBkg, ...bookings]);
-    onShowNotification('Reserva Confirmada!', `${newBookingArea} agendada com sucesso para ${newBkg.data}.`);
+    setBookings(prev => [newBkg, ...prev]);
+
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.from('bookings').insert([
+          {
+            id: newBkg.id,
+            area: newBkg.area,
+            data: newBkg.data,
+            periodo: newBkg.periodo,
+            status: newBkg.status
+          }
+        ]);
+        if (error) throw error;
+        onShowNotification('Reserva Confirmada!', `${newBookingArea} salva no banco Supabase para o dia ${newBkg.data}.`);
+      } else {
+        saveSimulatedData<Booking>('bookings', newBkg);
+        onShowNotification('Reserva Confirmada!', `${newBookingArea} agendada com sucesso para ${newBkg.data}.`);
+      }
+    } catch (err) {
+      console.warn('Supabase booking insert failed, saved offline:', err);
+      saveSimulatedData<Booking>('bookings', newBkg);
+      onShowNotification('Reserva Confirmada!', `${newBookingArea} agendada localmente.`);
+    }
   };
 
-  const handleAddTicket = (e: FormEvent) => {
+  const handleAddTicket = async (e: FormEvent) => {
     e.preventDefault();
     if (!newTicketTitle.trim()) {
       alert('Digite o título do ocorrência.');
@@ -196,10 +282,34 @@ export default function PortalModal({ isOpen, onClose, onShowNotification }: Por
       status: 'Aberto'
     };
 
-    setOcorrencias([newTkt, ...ocorrencias]);
+    setOcorrencias(prev => [newTkt, ...prev]);
+
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.from('tickets').insert([
+          {
+            id: newTkt.id,
+            categoria: newTkt.categoria,
+            titulo: newTkt.titulo,
+            descricao: newTkt.descricao,
+            data_criacao: newTkt.dataCriacao,
+            status: newTkt.status
+          }
+        ]);
+        if (error) throw error;
+        onShowNotification('Ocorrência Salva!', 'Registrado com sucesso no banco Supabase.');
+      } else {
+        saveSimulatedData<Ticket>('tickets', newTkt);
+        onShowNotification('Chamado Criado!', 'A equipe Facilities foi notificada e resolverá o chamado.');
+      }
+    } catch (err) {
+      console.warn('Supabase ticket insert failed, saved offline:', err);
+      saveSimulatedData<Ticket>('tickets', newTkt);
+      onShowNotification('Chamado Criado!', 'Ocorrência salva offline com sucesso.');
+    }
+
     setNewTicketTitle('');
     setNewTicketDesc('');
-    onShowNotification('Chamado Criado!', 'A equipe Facilities foi notificada e resolverá o chamado.');
   };
 
   const handleVote = (asmId: string, choice: 'Favor' | 'Contra') => {

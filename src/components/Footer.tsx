@@ -4,9 +4,11 @@ import Logo from './Logo';
 interface FooterProps {
   onOpenPortal: () => void;
   onNavigate: (type: 'home' | 'servico' | 'local' | 'blog' | 'faq', slug?: string) => void;
+  onOpenSupabaseDiag: () => void;
+  onOpenAdminDashboard: () => void;
 }
 
-export default function Footer({ onOpenPortal, onNavigate }: FooterProps) {
+export default function Footer({ onOpenPortal, onNavigate, onOpenSupabaseDiag, onOpenAdminDashboard }: FooterProps) {
   const handleScrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -131,13 +133,33 @@ export default function Footer({ onOpenPortal, onNavigate }: FooterProps) {
           <h4 className="font-sans font-extrabold text-xs uppercase tracking-widest text-[#101c29] mb-4">
             Área Reservada
           </h4>
-          <button
-            id="footer-portal-trigger-btn"
-            onClick={onOpenPortal}
-            className="inline-block px-4 py-2 border border-primary text-primary hover:bg-primary hover:text-white rounded-lg font-sans text-xs font-semibold transition-all active:scale-95 cursor-pointer w-full text-center"
-          >
-            Acesso ao Condômino
-          </button>
+          <div className="flex flex-col gap-2.5">
+            <button
+              id="footer-admin-dashboard-btn"
+              onClick={onOpenAdminDashboard}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#0f1b29] text-white hover:bg-[#182a3f] rounded-lg font-sans text-xs font-semibold transition-all active:scale-95 cursor-pointer w-full text-center"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Painel Administrativo Facilities
+            </button>
+
+            <button
+              id="footer-portal-trigger-btn"
+              onClick={onOpenPortal}
+              className="inline-block px-4 py-2 border border-primary text-primary hover:bg-primary hover:text-white rounded-lg font-sans text-xs font-semibold transition-all active:scale-95 cursor-pointer w-full text-center"
+            >
+              Acesso ao Condômino
+            </button>
+
+            <button
+              id="footer-supabase-diag-btn"
+              onClick={onOpenSupabaseDiag}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-900 border border-slate-850 text-white hover:bg-slate-800 rounded-lg font-mono text-[11px] transition-all active:scale-95 cursor-pointer w-full text-center font-bold"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              Conectar ao Supabase
+            </button>
+          </div>
         </div>
 
       </div>

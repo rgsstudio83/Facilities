@@ -7,9 +7,10 @@ interface HeaderProps {
   onOpenQuote: () => void;
   onNavigate: (type: 'home' | 'servico' | 'local' | 'blog' | 'faq', slug?: string) => void;
   currentViewType: string; // 'home' | 'servico' | 'local' | 'blog' | 'faq'
+  onOpenAdminDashboard: () => void;
 }
 
-export default function Header({ onOpenPortal, onOpenQuote, onNavigate, currentViewType }: HeaderProps) {
+export default function Header({ onOpenPortal, onOpenQuote, onNavigate, currentViewType, onOpenAdminDashboard }: HeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
@@ -85,7 +86,7 @@ export default function Header({ onOpenPortal, onOpenQuote, onNavigate, currentV
       </a>
 
       {/* Desktop Navigation */}
-      <nav className="hidden md:flex items-center gap-8">
+      <nav className="hidden lg:flex items-center gap-8">
         {navLinks.map((link) => {
           const isLinkActive = 
             (currentViewType === 'home' && activeSection === link.id) ||
@@ -114,7 +115,15 @@ export default function Header({ onOpenPortal, onOpenQuote, onNavigate, currentV
       </nav>
 
       {/* Action Buttons */}
-      <div className="hidden md:flex items-center gap-4">
+      <div className="hidden lg:flex items-center gap-4">
+        <button
+          id="header-admin-btn"
+          onClick={onOpenAdminDashboard}
+          className="bg-[#0f1b29] hover:bg-[#15273b] text-white px-4 py-2.5 rounded-lg font-sans text-xs font-bold active:scale-95 transition-all shadow-md inline-flex items-center gap-1.5 cursor-pointer border-0"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          Painel Adm
+        </button>
         <button
           id="header-quote-btn"
           onClick={onOpenQuote}
@@ -133,7 +142,16 @@ export default function Header({ onOpenPortal, onOpenQuote, onNavigate, currentV
       </div>
 
       {/* Mobile Menu Actions */}
-      <div className="flex md:hidden items-center gap-2">
+      <div className="flex lg:hidden items-center gap-2">
+        <button
+          id="mobile-admin-btn"
+          onClick={onOpenAdminDashboard}
+          className="bg-[#0f1b29] text-white p-2 rounded-lg font-sans text-xs active:scale-95 transition-all shadow-md flex items-center justify-center border-0 font-bold"
+          title="Painel Adm"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1"></span>
+          Adm
+        </button>
         <button
           id="mobile-portal-btn"
           onClick={onOpenPortal}

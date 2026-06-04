@@ -22,6 +22,8 @@ import Contato from './components/Contato';
 import Footer from './components/Footer';
 import QuoteModal from './components/QuoteModal';
 import PortalModal from './components/PortalModal';
+import SupabaseDiagnostics from './components/SupabaseDiagnostics';
+import AdminDashboardModal from './components/AdminDashboardModal';
 import { ContactMessage, QuoteRequest } from './types';
 
 // SEO and Page imports
@@ -35,6 +37,8 @@ import { servicePages, cityPages } from './data/seoData';
 export default function App() {
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
   const [isPortalOpen, setIsPortalOpen] = useState(false);
+  const [isSupabaseDiagOpen, setIsSupabaseDiagOpen] = useState(false);
+  const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
 
   // SPA Routing and Local SEO State
   const [currentPath, setCurrentPath] = useState('home'); // #home, #servico/[slug], #local/[slug], #blog, #faq
@@ -197,6 +201,7 @@ export default function App() {
         onOpenQuote={() => setIsQuoteOpen(true)} 
         onNavigate={handleNavigate}
         currentViewType={viewType}
+        onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
       />
 
       {/* Main Page Content */}
@@ -347,7 +352,12 @@ export default function App() {
       </main>
 
       {/* FOOTER component */}
-      <Footer onOpenPortal={() => setIsPortalOpen(true)} onNavigate={handleNavigate} />
+      <Footer 
+        onOpenPortal={() => setIsPortalOpen(true)} 
+        onNavigate={handleNavigate} 
+        onOpenSupabaseDiag={() => setIsSupabaseDiagOpen(true)}
+        onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
+      />
 
       {/* PROPOSAL INQUIRY STEP FLOW MODAL */}
       <QuoteModal
@@ -361,6 +371,20 @@ export default function App() {
         isOpen={isPortalOpen}
         onClose={() => setIsPortalOpen(false)}
         onShowNotification={handleShowToast}
+      />
+
+      {/* SUPABASE CONNECTION AND DEVS TOOL DIAG PANEL */}
+      <SupabaseDiagnostics
+        isOpen={isSupabaseDiagOpen}
+        onClose={() => setIsSupabaseDiagOpen(false)}
+        onShowMessage={handleShowToast}
+      />
+
+      {/* FACILITIES EXECUTIVE ADMINISTRATIVE DASHBOARD */}
+      <AdminDashboardModal
+        isOpen={isAdminDashboardOpen}
+        onClose={() => setIsAdminDashboardOpen(false)}
+        onShowMessage={handleShowToast}
       />
 
       {/* WHATSAPP CHAT POPUP SIMULATION BADGE */}

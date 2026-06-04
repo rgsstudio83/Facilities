@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Building2, User, HelpCircle, Check, Sparkles, Receipt, Percent } from 'lucide-react';
 import { QuoteRequest } from '../types';
+import { supabase, isSupabaseConfigured, saveSimulatedData } from '../lib/supabaseClient';
 
 interface QuoteModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export default function QuoteModal({ isOpen, onClose, onAddQuoteShowToast }: Quo
   const [contatoEmail, setContatoEmail] = useState('');
   const [contatoTelefone, setContatoTelefone] = useState('');
   const [cargo, setCargo] = useState<'Síndico' | 'Conselheiro' | 'Morador' | 'Administradora'>('Síndico');
+  const [supabaseStatus, setSupabaseStatus] = useState<'success' | 'fallback' | 'loading' | null>(null);
 
   // Interactive estimates
   const honorariosEstimated = Math.max(750, unidades * 18 + 350);
@@ -38,9 +40,10 @@ export default function QuoteModal({ isOpen, onClose, onAddQuoteShowToast }: Quo
     setStep((prev) => prev - 1);
   };
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
+    const quoteId = "QUO-" + Math.random().toString(36).substring(2, 9).toUpperCase();
     const quote: QuoteRequest = {
-      id: Math.random().toString(36).substring(7),
+      id: quoteId,
       condominioNome,
       endereco,
       unidades,
@@ -49,11 +52,55 @@ export default function QuoteModal({ isOpen, onClose, onAddQuoteShowToast }: Quo
       contatoTelefone,
       cargo,
     };
+
+    setSupabaseStatus('loading');
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase
+          .from('quote_requests')
+          .insert([
+            {
+              id: quote.id,
+              condominio_nome: quote.condominioNome,
+              endereco: quote.endereco,
+              unidades: quote.unidades,
+              contato_nome: quote.contatoNome,
+              contato_email: quote.contatoEmail,
+              contato_telefone: quote.contatoTelefone,
+              cargo: quote.cargo
+            }
+          ]);
+
+        if (error) {
+          console.warn('Supabase quote insert failed, falling back locally:', error.message);
+          saveSimulatedData<QuoteRequest>('quote_requests', quote);
+          setSupabaseStatus('fallback');
+        } else {
+          console.log('Successfully saved quote to Supabase!');
+          setSupabaseStatus('success');
+        }
+      } else {
+        saveSimulatedData<QuoteRequest>('quote_requests', quote);
+        setSupabaseStatus('fallback');
+      }
+    } catch (err) {
+      console.error('Failed to save to Supabase, falling back locally:', err);
+      saveSimulatedData<QuoteRequest>('quote_requests', quote);
+      setSupabaseStatus('fallback');
+    }
+
     onAddQuoteShowToast(quote);
     setStep(4); // Show estimate & success page
   };
 
+  const handleClose = () => {
+    setStep(1);
+    setSupabaseStatus(null);
+    onClose();
+  };
+
   if (!isOpen) return null;
+
 
   return (
     <div id="quote-modal-overlay" className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
@@ -69,7 +116,7 @@ export default function QuoteModal({ isOpen, onClose, onAddQuoteShowToast }: Quo
           </div>
           <button
             id="quote-modal-close-btn"
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1 px-3 bg-white/20 hover:bg-white/30 rounded-lg text-sm text-white transition-all font-semibold"
           >
             Fechar &times;
@@ -239,7 +286,7 @@ export default function QuoteModal({ isOpen, onClose, onAddQuoteShowToast }: Quo
           )}
 
           {step === 4 && (
-            <div id="quote-step-4" className="space-y-6 text-center animate-fade-in">
+            <div id="quote-step-4" className="space-y-6 text-center animate-fade-in flex flex-col justify-center">
               <div className="w-16 h-16 rounded-full bg-success/15 text-success flex items-center justify-center mx-auto mb-4">
                 <Sparkles className="w-8 h-8" />
               </div>
@@ -248,7 +295,7 @@ export default function QuoteModal({ isOpen, onClose, onAddQuoteShowToast }: Quo
                 Sua proposta executiva já foi mapeada. Segue abaixo um orçamento prévio e as otimizações financeiras calculadas para o <strong>{condominioNome}</strong>:
               </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-lg mx-auto w-full">
                 {/* Cost card */}
                 <div className="p-4 bg-[#F1F4F8] border border-border-light rounded-2xl text-left space-y-1">
                   <span className="text-[10px] uppercase text-secondary font-semibold flex items-center gap-1">
@@ -268,14 +315,31 @@ export default function QuoteModal({ isOpen, onClose, onAddQuoteShowToast }: Quo
                 </div>
               </div>
 
+              {supabaseStatus === 'success' && (
+                <div className="mx-auto select-none">
+                  <span className="text-[11px] text-green-700 bg-green-50 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 font-semibold border border-green-100 max-w-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                    Sincronizado estruturalmente com o Supabase! (Tabela: quote_requests)
+                  </span>
+                </div>
+              )}
+              {supabaseStatus === 'fallback' && (
+                <div className="mx-auto select-none">
+                  <span className="text-[11px] text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 font-semibold border border-amber-100 max-w-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                    Estudo salvo com segurança (Modo simulação local)
+                  </span>
+                </div>
+              )}
+
               <div className="bg-[#FFEBEB] text-primary/85 p-3.5 rounded-xl text-xs max-w-md mx-auto">
                 * Este é um estudo automatizado básico. Um de nossos consultores seniores enviará a proposta comercial formalizada por e-mail em anexo PDF hoje mesmo.
               </div>
 
               <button
                 id="quote-success-close-btn"
-                onClick={onClose}
-                className="bg-primary text-on-primary hover:bg-primary-hover px-10 py-3 rounded-lg font-semibold shadow-md inline-block text-sm transition-all"
+                onClick={handleClose}
+                className="bg-primary text-on-primary hover:bg-primary-hover px-10 py-3 rounded-lg font-semibold shadow-md inline-block text-sm transition-all cursor-pointer self-center"
               >
                 Concluir e Voltar ao Site
               </button>
