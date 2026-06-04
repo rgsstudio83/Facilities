@@ -26,6 +26,7 @@ import PortalModal from './components/PortalModal';
 import SupabaseDiagnostics from './components/SupabaseDiagnostics';
 import AdminDashboardModal from './components/AdminDashboardModal';
 import { ContactMessage, QuoteRequest } from './types';
+import ScrollAnimate from './components/ScrollAnimate';
 
 // SEO and Page imports
 import ServiceDetailView from './components/ServiceDetailView';
@@ -265,10 +266,28 @@ export default function App() {
             </section>
 
             {/* BENTO DIFERENCIAIS SECTION component */}
-            <DiferenciaisSection />
+            <ScrollAnimate>
+              <DiferenciaisSection />
+            </ScrollAnimate>
+
+            {/* SERVICES SECTION TABS component */}
+            <ScrollAnimate>
+              <ServicesSection onNavigateToService={(slug) => handleNavigate('servico', slug)} />
+            </ScrollAnimate>
+
+            {/* PILARES DA METODOLOGIA component */}
+            <ScrollAnimate>
+              <ComoTrabalhamos />
+            </ScrollAnimate>
+
+            {/* POR QUE ESCOLHER A FACILITIES (Split portrait) component */}
+            <ScrollAnimate>
+              <SobreNos />
+            </ScrollAnimate>
 
             {/* FACILITIES APP DOWNLOAD SECTION */}
-            <section id="app-facilities" className="py-16 bg-slate-50 border-y border-gray-100">
+            <ScrollAnimate>
+              <section id="app-facilities" className="py-16 bg-slate-50 border-y border-gray-100">
               <div className="max-w-7xl mx-auto px-4 md:px-12">
                 <div id="app-promo-card" className="bg-[#101c29] rounded-3xl p-8 md:p-12 text-white shadow-2xl relative overflow-hidden">
                   
@@ -349,61 +368,94 @@ export default function App() {
 
                     {/* Right Column: Simulated App Interface Display */}
                     <div className="lg:col-span-5 flex justify-center relative">
-                      <div className="relative w-64 h-[380px] bg-slate-900 rounded-[36px] border-4 border-slate-700/50 p-2 shadow-2xl overflow-hidden flex flex-col justify-between">
-                        {/* Speaker Notch */}
-                        <div className="absolute top-1 left-1/2 -translate-x-1/2 w-20 h-3.5 bg-slate-800 rounded-full flex items-center justify-center p-0.5 z-20">
-                          <div className="w-10 h-0.5 bg-slate-700 rounded-full"></div>
+                      {/* Premium Device Mockup */}
+                      <div className="relative w-72 h-[520px] bg-slate-950 rounded-[44px] border-[10px] border-slate-800 p-2.5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col justify-between">
+                        
+                        {/* Dynamic Island / Notch Cutout */}
+                        <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-28 h-5 bg-black rounded-full flex items-center justify-around px-2 z-25">
+                          <div className="w-3.5 h-1 rounded-full bg-slate-800/80"></div>
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-900/40"></div>
                         </div>
 
-                        {/* App UI simulation */}
-                        <div className="mt-3 flex-1 bg-slate-950 rounded-[24px] overflow-hidden flex flex-col font-sans p-3 relative text-white">
+                        {/* App UI simulation with Gradient Background */}
+                        <div className="pt-6 pb-2 px-3.5 flex-1 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 rounded-[32px] overflow-hidden flex flex-col font-sans relative text-white">
                           
+                          {/* Inner soft overlay light */}
+                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none"></div>
+
                           {/* Header of mobile app */}
-                          <div className="flex items-center justify-between border-b border-white/5 pb-1.5 mb-2">
+                          <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3.5 relative z-10 font-sans">
                             <div>
-                              <p className="text-[9px] uppercase tracking-widest text-primary font-bold">Facilities Mobile</p>
-                              <h5 className="text-[10px] text-gray-300">Condomínio Amoreiras</h5>
+                              <p className="text-[10px] uppercase tracking-widest text-[#ff3c53] font-extrabold">Facilities Mobile</p>
+                              <h5 className="text-[11px] text-gray-300 font-medium">Condomínio Amoreiras</h5>
                             </div>
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                              <span className="text-[9px] text-emerald-400 font-semibold font-mono">LIVE</span>
+                            </div>
                           </div>
 
-                          {/* Stat Card */}
-                          <div className="bg-white/5 rounded-xl p-2 mb-2 border border-white/5 space-y-1">
-                            <p className="text-[7.5px] text-gray-400">Mensalidade Atual (Vencimento 10/06)</p>
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs font-mono font-bold text-white">R$ 498,50</span>
-                              <span className="text-[7px] uppercase bg-[#ff3c53]/20 text-[#ff7d8d] font-bold px-1.5 py-0.5 rounded">Aberto</span>
+                          {/* Welcome User Banner */}
+                          <div className="mb-3 relative z-10 px-0.5">
+                            <h6 className="text-[10px] text-gray-400 font-medium leading-none mb-1">Olá,</h6>
+                            <h4 className="text-sm font-bold text-white tracking-tight">Roberto Silva <span className="text-xs text-gray-400 font-normal">(Apto 41-B)</span></h4>
+                          </div>
+
+                          {/* Stat Card / Financial invoice */}
+                          <div className="bg-white/5 rounded-2xl p-3 mb-3.5 border border-white/10 space-y-1.5 relative z-10 backdrop-blur-md shadow-lg font-sans">
+                            <div className="flex justify-between items-start">
+                              <p className="text-[8px] text-gray-400 uppercase tracking-wider font-semibold">Boleto / Mensalidade</p>
+                              <span className="text-[8px] uppercase bg-amber-500/10 text-amber-400 font-bold px-2 py-0.5 rounded-full border border-amber-500/20">Aberto</span>
                             </div>
-                            <button className="w-full mt-1 py-1 bg-primary text-white rounded text-[8px] font-bold">Copiar código PIX</button>
+                            <div className="flex justify-between items-baseline">
+                              <span className="text-sm font-mono font-bold text-white">R$ 498,50</span>
+                              <span className="text-[8.5px] text-gray-400">Vence: 10/06/2026</span>
+                            </div>
+                            <button className="w-full mt-1.5 py-1.5 bg-[#ff3c53] hover:bg-[#e02b40] active:scale-[0.98] text-white rounded-xl text-[9px] font-bold transition-all flex items-center justify-center gap-1">
+                              Copiar código PIX
+                            </button>
                           </div>
 
                           {/* Quick shortcuts */}
-                          <div className="space-y-1">
-                            <p className="text-[7.5px] text-gray-400 uppercase font-semibold">Atalhos do Aplicativo</p>
-                            <div className="grid grid-cols-2 gap-1">
-                              <div className="bg-white/5 p-1.5 rounded-lg text-center border border-white/5">
-                                <span className="block text-[8px] font-bold">📅 Reservas</span>
+                          <div className="space-y-2 relative z-10 font-sans">
+                            <p className="text-[9px] text-gray-400 uppercase tracking-widest font-bold px-0.5">Atalhos Principais</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
+                                <span className="block text-sm mb-0.5">📅</span>
+                                <span className="block text-[8.5px] font-bold text-gray-200">Reservas Áreas</span>
                               </div>
-                              <div className="bg-white/5 p-1.5 rounded-lg text-center border border-white/5">
-                                <span className="block text-[8px] font-bold">📊 Contas</span>
+                              <div className="bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
+                                <span className="block text-sm mb-0.5">📊</span>
+                                <span className="block text-[8.5px] font-bold text-gray-200">Finanças Cond.</span>
                               </div>
-                              <div className="bg-white/5 p-1.5 rounded-lg text-center border border-white/5">
-                                <span className="block text-[8px] font-bold">💬 Mural</span>
+                              <div className="bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
+                                <span className="block text-sm mb-0.5">✉️</span>
+                                <span className="block text-[8.5px] font-bold text-gray-200">Mural Sindical</span>
                               </div>
-                              <div className="bg-white/5 p-1.5 rounded-lg text-center border border-white/5">
-                                <span className="block text-[8px] font-bold">📋 Atas</span>
+                              <div className="bg-white/5 hover:bg-white/10 p-2 rounded-xl text-center border border-white/5 transition-all cursor-pointer">
+                                <span className="block text-sm mb-0.5">📋</span>
+                                <span className="block text-[8.5px] font-bold text-gray-200">Atas & Despesas</span>
                               </div>
                             </div>
                           </div>
 
                           {/* Bottom Tab Simulation */}
-                          <div className="border-t border-white/10 pt-1.5 mt-auto flex justify-around text-[9px] text-gray-500">
-                            <span className="text-primary font-bold">Home</span>
-                            <span>Avisos</span>
-                            <span>Perfil</span>
+                          <div className="border-t border-white/10 pt-2 pb-0.5 mt-auto flex justify-around text-[10px] text-gray-400 relative z-10 font-sans">
+                            <span className="text-[#ff3c53] font-extrabold flex flex-col items-center gap-0.5 cursor-pointer">
+                              <span className="text-[11px]">🏠</span>
+                              <span className="text-[8.5px]">Início</span>
+                            </span>
+                            <span className="hover:text-white flex flex-col items-center gap-0.5 cursor-pointer">
+                              <span className="text-[11px]">🔔</span>
+                              <span className="text-[8.5px]">Avisos</span>
+                            </span>
+                            <span className="hover:text-white flex flex-col items-center gap-0.5 cursor-pointer">
+                              <span className="text-[11px]">👤</span>
+                              <span className="text-[8.5px]">Minha Área</span>
+                            </span>
                           </div>
-                        </div>
 
+                        </div>
                       </div>
                     </div>
 
@@ -411,27 +463,27 @@ export default function App() {
                 </div>
               </div>
             </section>
-
-            {/* SERVICES SECTION TABS component */}
-            <ServicesSection onNavigateToService={(slug) => handleNavigate('servico', slug)} />
-
-            {/* PILARES DA METODOLOGIA component */}
-            <ComoTrabalhamos />
-
-            {/* POR QUE ESCOLHER A FACILITIES (Split portrait) component */}
-            <SobreNos />
+          </ScrollAnimate>
 
             {/* AREAS ATENDIDAS SECTIONS HOVER HUB */}
-            <AreasAtendidas onNavigateToCity={(slug) => handleNavigate('local', slug)} />
+            <ScrollAnimate>
+              <AreasAtendidas onNavigateToCity={(slug) => handleNavigate('local', slug)} />
+            </ScrollAnimate>
 
             {/* SLIDING DEPOIMENTOS CLIENTES component */}
-            <Depoimentos />
+            <ScrollAnimate>
+              <Depoimentos />
+            </ScrollAnimate>
 
             {/* EXPANDABLE COLLAPSIBLE 20+ EXTRAS FAQ SECTION */}
-            <FAQSection />
+            <ScrollAnimate>
+              <FAQSection />
+            </ScrollAnimate>
 
             {/* CONTATO INTERACTION COMPONENT */}
-            <Contato onAddMessageShowToast={handleAddMessageShowToast} />
+            <ScrollAnimate>
+              <Contato onAddMessageShowToast={handleAddMessageShowToast} />
+            </ScrollAnimate>
           </div>
         )}
 
