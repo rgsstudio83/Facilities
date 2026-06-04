@@ -57,10 +57,10 @@ export async function getCurrentProfile() {
 // Query profiles table and support standard and fallback schemas
 async function queryPerfisTable(userId: string): Promise<UserProfile | null> {
   try {
-    // 1. obter usuário autenticado e buscar na tabela perfis where auth_user_id = auth.uid()
+    // 1. obter usuário autenticado e buscar na tabela perfis com select('*') para tolerar qualquer estrutura de colunas do banco
     const { data, error } = await supabase
       .from('perfis')
-      .select('id, nome, email, tipo, perfil, unidade, cpf, auth_user_id')
+      .select('*')
       .eq('auth_user_id', userId)
       .maybeSingle();
 
@@ -68,7 +68,7 @@ async function queryPerfisTable(userId: string): Promise<UserProfile | null> {
       // 2. try fallback to id primary key matching
       const { data: fallbackIdData, error: fbError } = await supabase
         .from('perfis')
-        .select('id, nome, email, tipo, perfil, unidade, cpf, auth_user_id')
+        .select('*')
         .eq('id', userId)
         .maybeSingle();
 
@@ -484,14 +484,15 @@ export function PortalRouterProvider({
       if (error) throw error;
 
       if (data?.user) {
-        // 2. Criar registro na tabela perfis, mapeando id e auth_user_id via upsert robusto para evitar conflitos de trigger
+        // 2. Criar registro na tabela perfis, mapeando id e auth_user_id via upsert robusto e resiliente
         const normalizedRole = role.toLowerCase()
           .replace('síndico', 'sindico')
           .replace('subsíndico', 'subsindico')
           .replace('proprietário', 'proprietario')
           .trim();
 
-        const { error: insertError } = await supabase.from('perfis').upsert({
+        // payload completo com todas as possíveis colunas de simulação e de produção
+        const fullPayload: any = {
           id: data.user.id,
           auth_user_id: data.user.id,
           nome: name.trim(),
@@ -500,13 +501,30 @@ export function PortalRouterProvider({
           unidade: unit.trim(),
           tipo: normalizedRole,
           perfil: role
-        });
+        };
 
+        // tenta inserir o payload completo primeiro
+        let { error: insertError } = await supabase.from('perfis').upsert(fullPayload);
+
+        // Se falhar por incompatibilidade de tabela de produção, tentamos apenas com os campos essenciais que existem em ambos os esquemas
         if (insertError) {
-          console.warn('Alerta ao gravar perfil no DB:', insertError.message);
+          console.warn('Upsert completo do perfil falhou, tentando apenas com colunas principais de produção:', insertError.message);
+          const corePayload = {
+            id: data.user.id,
+            auth_user_id: data.user.id,
+            nome: name.trim(),
+            email: email.trim(),
+            tipo: normalizedRole
+          };
+          const { error: coreInsertError } = await supabase.from('perfis').upsert(corePayload);
+          insertError = coreInsertError;
         }
 
-        triggerNotification('Cadastro Realizado!', 'Sua conta foi criada no Supabase e associada na tabela de Perfis.');
+        if (insertError) {
+          console.error('Falha ao gravar perfil no DB real do Supabase:', insertError.message);
+        } else {
+          triggerNotification('Cadastro Realizado!', 'Sua conta foi criada no Supabase e associada na tabela de Perfis.');
+        }
         
         // Log in immediately to establish session. If email confirmation is enabled on Supabase,
         // login might fail with "Email not confirmed". We handle this gracefully by setting a highly fluent,
