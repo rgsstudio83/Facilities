@@ -42,11 +42,18 @@ export default function App() {
   const [isSupabaseDiagOpen, setIsSupabaseDiagOpen] = useState(false);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [authenticatedProfile, setAuthenticatedProfile] = useState<string>('admin');
+  const [currentUser, setCurrentUser] = useState<{ name: string; profile: string; unit: string } | null>(null);
 
   const handleLoginSuccess = (username: string, profile: string, unit: string) => {
     setAuthenticatedProfile(profile);
+    setCurrentUser({ name: username, profile, unit });
     setIsPortalOpen(false);
     setIsAdminDashboardOpen(true);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setAuthenticatedProfile('admin');
   };
 
   // SPA Routing and Local SEO State
@@ -592,6 +599,8 @@ export default function App() {
         onClose={() => setIsAdminDashboardOpen(false)}
         onShowMessage={handleShowToast}
         initialProfile={authenticatedProfile}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* WHATSAPP CHAT POPUP SIMULATION BADGE */}

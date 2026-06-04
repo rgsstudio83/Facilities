@@ -665,64 +665,64 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
           console.log('Gravando perfil na tabela "perfis"...');
           let successInserted = false;
 
-          // Attempt A: Standard Schema (id, auth_user_id, nome, email, tipo, telefone)
+          // Attempt A: Exact match with the DDL Schema for 'perfis' table (id, nome, cpf, email, unidade, perfil)
           try {
-            const { error: insertError } = await supabase.from('perfis').insert({
+            const { error: insertSimError } = await supabase.from('perfis').insert({
               id: sessionUser.id,
-              auth_user_id: sessionUser.id,
               nome: regName.trim(),
+              cpf: regCpf.trim(),
               email: regEmail.trim(),
-              tipo: tipoValue,
-              telefone: regCpf.trim()
+              unidade: regUnit.trim(),
+              perfil: targetProfileType
             });
-            if (!insertError) {
-              console.log('Perfil gravado sob o formato de produção com id e auth_user_id.');
+
+            if (!insertSimError) {
+              console.log('Perfil gravado com sucesso no formato da tabela "perfis".');
               successInserted = true;
             } else {
-              console.warn('Falha no formato de produção com id (Tentativa A):', insertError.message);
+              console.warn('Falhar ao gravar perfil com formato oficial do DDL:', insertSimError.message);
             }
           } catch (e: any) {
             console.warn('Tentativa A gerou exceção:', e);
           }
 
-          // Attempt B: Standard Schema with only auth_user_id (omitting manual primary key id selection)
+          // Attempt B: Fallback Schema with id, auth_user_id, nome, email, tipo, telefone
           if (!successInserted) {
             try {
-              const { error: insertErrorB } = await supabase.from('perfis').insert({
+              const { error: insertError } = await supabase.from('perfis').insert({
+                id: sessionUser.id,
                 auth_user_id: sessionUser.id,
                 nome: regName.trim(),
                 email: regEmail.trim(),
                 tipo: tipoValue,
                 telefone: regCpf.trim()
               });
-              if (!insertErrorB) {
-                console.log('Perfil gravado sob o formato de produção com auto UUID (Tentativa B).');
+              if (!insertError) {
+                console.log('Perfil gravado sob formato alternativo de produção com id e auth_user_id (Tentativa B).');
                 successInserted = true;
               } else {
-                console.warn('Falha no formato de produção sem id personalizado (Tentativa B):', insertErrorB.message);
+                console.warn('Falha no formato alternativo de produção (Tentativa B):', insertError.message);
               }
             } catch (e: any) {
               console.warn('Tentativa B gerou exceção:', e);
             }
           }
 
-          // Attempt C: Fallback strategy for basic/simplified table columns (id, nome, cpf, email, unidade, perfil)
+          // Attempt C: Fallback Schema with only auth_user_id
           if (!successInserted) {
             try {
-              const { error: insertSimError } = await supabase.from('perfis').insert({
-                id: sessionUser.id,
+              const { error: insertErrorC } = await supabase.from('perfis').insert({
+                auth_user_id: sessionUser.id,
                 nome: regName.trim(),
-                cpf: regCpf.trim(),
                 email: regEmail.trim(),
-                unidade: regUnit.trim(),
-                perfil: targetProfileType
+                tipo: tipoValue,
+                telefone: regCpf.trim()
               });
-
-              if (!insertSimError) {
-                console.log('Perfil gravado sob o formato da tabela simplificada (Tentativa C).');
+              if (!insertErrorC) {
+                console.log('Perfil gravado sob formato alternativo sem id personalizado (Tentativa C).');
                 successInserted = true;
               } else {
-                console.warn('Falha no formato de tabela simplificada (Tentativa C):', insertSimError.message);
+                console.warn('Falha no formato alternativo sem id (Tentativa C):', insertErrorC.message);
               }
             } catch (e: any) {
               console.warn('Tentativa C gerou exceção:', e);

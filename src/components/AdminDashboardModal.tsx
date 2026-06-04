@@ -43,6 +43,8 @@ interface AdminDashboardModalProps {
   onClose: () => void;
   onShowMessage: (title: string, desc: string) => void;
   initialProfile?: string;
+  currentUser?: { name: string; profile: string; unit: string } | null;
+  onLogout?: () => void;
 }
 
 // Data Interfaces
@@ -107,7 +109,14 @@ interface Encomenda {
   status: 'Aguardando' | 'Retirada';
 }
 
-export default function AdminDashboardModal({ isOpen, onClose, onShowMessage, initialProfile }: AdminDashboardModalProps) {
+export default function AdminDashboardModal({ 
+  isOpen, 
+  onClose, 
+  onShowMessage, 
+  initialProfile,
+  currentUser,
+  onLogout
+}: AdminDashboardModalProps) {
   // Profiles Base Setup
   const [activeProfile, setActiveProfile] = useState<'admin' | 'colaborador' | 'sindico' | 'subsindico' | 'conselheiro' | 'proprietario' | 'morador' | 'porteiro'>('admin');
   const [activeSubPage, setActiveSubPage] = useState<string>('dashboard');
@@ -116,8 +125,13 @@ export default function AdminDashboardModal({ isOpen, onClose, onShowMessage, in
 
   // Sync initial authenticated profile when modal opens
   useEffect(() => {
-    if (isOpen && initialProfile) {
-      const normalized = initialProfile.toLowerCase()
+    let rawProfile = initialProfile;
+    if (currentUser?.profile) {
+      rawProfile = currentUser.profile;
+    }
+
+    if (isOpen && rawProfile) {
+      const normalized = rawProfile.toLowerCase()
         .replace('síndico', 'sindico')
         .replace('subsíndico', 'subsindico')
         .replace('proprietário', 'proprietario')
@@ -132,7 +146,7 @@ export default function AdminDashboardModal({ isOpen, onClose, onShowMessage, in
         setActiveProfile(normalized as any);
       }
     }
-  }, [isOpen, initialProfile]);
+  }, [isOpen, initialProfile, currentUser]);
 
   // Simulated Database states
   const [condos, setCondos] = useState<Condominio[]>([
@@ -475,44 +489,61 @@ export default function AdminDashboardModal({ isOpen, onClose, onShowMessage, in
       <div id="admin-dashboard-card" className="bg-white rounded-none md:rounded-[32px] w-full max-w-7xl h-full md:h-[90vh] border border-[#cfdbec] shadow-2xl overflow-hidden flex flex-col">
         
         {/* UPPER SENSITIVE REAL-TIME SECURITY PLAYGROUND SWITCHER */}
-        <div className="bg-[#0b131f] border-b border-[#af101a]/30 p-4 select-none shrink-0 text-left">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-[10px] text-gray-400 uppercase font-mono tracking-widest font-bold">SIMULADOR DE DIRETRIZES DE ACESSO (PERFIS DO SISTEMA & RLS)</span>
-          </div>
-          
-          <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-white font-sans text-xs font-semibold mr-1">Selecione o Perfil Ativo:</span>
-            {(['admin', 'colaborador', 'sindico', 'subsindico', 'conselheiro', 'proprietario', 'morador', 'porteiro'] as const).map(role => (
-              <button
-                key={role}
-                id={`role-pill-${role}`}
-                onClick={() => {
-                  setActiveProfile(role);
-                  onShowMessage("Mudança de Perfil", `Acesso operando sob a credencial: ${role.toUpperCase()}`);
-                  addAuditLog('EDITAR', 'sessao', `Sessão chaveada para o perfil: ${role.toUpperCase()}`);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer hover:scale-[1.03] ${
-                  activeProfile === role 
-                    ? 'bg-[#af101a] text-white shadow-md font-extrabold ring-2 ring-red-500/20' 
-                    : 'bg-white/10 text-gray-300 hover:bg-white/15'
-                }`}
-              >
-                {role.charAt(0).toUpperCase() + role.slice(1)}
-              </button>
-            ))}
-          </div>
+        {!currentUser ? (
+          <div className="bg-[#0b131f] border-b border-[#af101a]/30 p-4 select-none shrink-0 text-left">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="text-[10px] text-gray-400 uppercase font-mono tracking-widest font-bold">SIMULADOR DE DIRETRIZES DE ACESSO (PERFIS DO SISTEMA & RLS)</span>
+            </div>
+            
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-white font-sans text-xs font-semibold mr-1">Selecione o Perfil Ativo:</span>
+              {(['admin', 'colaborador', 'sindico', 'subsindico', 'conselheiro', 'proprietario', 'morador', 'porteiro'] as const).map(role => (
+                <button
+                  key={role}
+                  id={`role-pill-${role}`}
+                  onClick={() => {
+                    setActiveProfile(role);
+                    onShowMessage("Mudança de Perfil", `Acesso operando sob a credencial: ${role.toUpperCase()}`);
+                    addAuditLog('EDITAR', 'sessao', `Sessão chaveada para o perfil: ${role.toUpperCase()}`);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer hover:scale-[1.03] ${
+                    activeProfile === role 
+                      ? 'bg-[#af101a] text-white shadow-md font-extrabold ring-2 ring-red-500/20' 
+                      : 'bg-white/10 text-gray-300 hover:bg-white/15'
+                  }`}
+                >
+                  {role.charAt(0).toUpperCase() + role.slice(1)}
+                </button>
+              ))}
+            </div>
 
-          <p className="text-[10px] text-gray-400 mt-2 font-sans italic flex items-center gap-1">
-            <Lock className="w-3 h-3 text-[#af101a]" />
-            {isRlsActiveForCondo && "Filtro de RLS Ativo: Visualização restrita unicamente ao seu condomínio vinculado (Condomínio Vista Parque)."}
-            {isRlsActiveForUnit && "Filtro de RLS Ativo: Visualização restrita unicamente à sua unidade autônoma (Apto 41-B)."}
-            {isPorteiroRole && "Filtro de RLS Comercial: Financeiro e inadimplência inacessíveis por RLS corporativa."}
-            {activeProfile === 'admin' && "Controle Supremo: Sem restrições de RLS. CRUD irrestrito em todas as tabelas."}
-            {activeProfile === 'colaborador' && "Sessão Colaborador: Visualização unificada. Direitos de gravação e exclusão limitados."}
-            {activeProfile === 'conselheiro' && "Modo Read-Only Ativo: Conselheiros visualizam financeiro e inadimplência mas não podem gravar ou deletar dados."}
-          </p>
-        </div>
+            <p className="text-[10px] text-gray-400 mt-2 font-sans italic flex items-center gap-1">
+              <Lock className="w-3 h-3 text-[#af101a]" />
+              {isRlsActiveForCondo && "Filtro de RLS Ativo: Visualização restrita unicamente ao seu condomínio vinculado (Condomínio Vista Parque)."}
+              {isRlsActiveForUnit && "Filtro de RLS Ativo: Visualização restrita unicamente à sua unidade autônoma (Apto 41-B)."}
+              {isPorteiroRole && "Filtro de RLS Comercial: Financeiro e inadimplência inacessíveis por RLS corporativa."}
+              {activeProfile === 'admin' && "Controle Supremo: Sem restrições de RLS. CRUD irrestrito em todas as tabelas."}
+              {activeProfile === 'colaborador' && "Sessão Colaborador: Visualização unificada. Direitos de gravação e exclusão limitados."}
+              {activeProfile === 'conselheiro' && "Modo Read-Only Ativo: Conselheiros visualizam financeiro e inadimplência mas não podem gravar ou deletar dados."}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-[#0b1d2e] border-b border-[#2eaf58]/40 p-4 select-none shrink-0 text-left flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
+              <div>
+                <span className="text-[10px] text-emerald-400 uppercase font-mono tracking-widest font-black block">Painel Autenticado Via Supabase / Portal</span>
+                <span className="text-white font-sans text-xs font-semibold">
+                  Sessão ativa de <strong className="text-emerald-400 font-bold">{currentUser.name}</strong> • Função: <strong className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] uppercase font-mono px-2 py-0.5 rounded font-black">{currentUser.profile}</strong> {currentUser.unit ? `• Unidade: ${currentUser.unit}` : ''}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Acesso Seguro</span>
+            </div>
+          </div>
+        )}
 
         {/* TOP GIGANTIC EXECUTIVE GLASS HEADER */}
         <div className="bg-[#0f1b29] text-white p-5 px-6 border-b border-white/5 flex flex-wrap justify-between items-center gap-4 relative overflow-hidden shrink-0 select-none">
@@ -541,8 +572,11 @@ export default function AdminDashboardModal({ isOpen, onClose, onShowMessage, in
             </div>
             <button
               id="admin-close-top-btn"
-              onClick={onClose}
-              className="bg-white/10 hover:bg-white/20 p-2.5 rounded-xl border-0 cursor-pointer font-bold text-white"
+              onClick={() => {
+                if (onLogout) onLogout();
+                onClose();
+              }}
+              className="bg-white/10 hover:bg-white/20 p-2.5 rounded-xl border-0 cursor-pointer font-bold text-white transition-all hover:scale-105 active:scale-95"
             >
               &times; Sair
             </button>
