@@ -36,6 +36,46 @@ export default function SupabaseDiagnostics({ isOpen, onClose, onShowMessage }: 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const [inputUrl, setInputUrl] = useState(localStorage.getItem('VITE_SUPABASE_URL') || '');
+  const [inputKey, setInputKey] = useState(localStorage.getItem('VITE_SUPABASE_ANON_KEY') || '');
+
+  const handleSaveCredentials = () => {
+    if (!inputUrl.trim() || !inputKey.trim()) {
+      alert('Por favor, preencha a URL e a Anon Key para estabelecer a conexão.');
+      return;
+    }
+    
+    let sanitizedUrl = inputUrl.trim();
+    // Strip starting/ending quotes if present (e.g. "https://..." or 'https://...')
+    if ((sanitizedUrl.startsWith('"') && sanitizedUrl.endsWith('"')) || (sanitizedUrl.startsWith("'") && sanitizedUrl.endsWith("'"))) {
+      sanitizedUrl = sanitizedUrl.slice(1, -1).trim();
+    }
+    sanitizedUrl = sanitizedUrl.replace(/\/$/, ''); // Remove trailing slashes
+
+    let sanitizedKey = inputKey.trim();
+    if ((sanitizedKey.startsWith('"') && sanitizedKey.endsWith('"')) || (sanitizedKey.startsWith("'") && sanitizedKey.endsWith("'"))) {
+      sanitizedKey = sanitizedKey.slice(1, -1).trim();
+    }
+
+    localStorage.setItem('VITE_SUPABASE_URL', sanitizedUrl);
+    localStorage.setItem('VITE_SUPABASE_ANON_KEY', sanitizedKey);
+    onShowMessage('Conexão Estabelecida!', 'As credenciais do Supabase foram armazenadas com sucesso no navegador. Atualizando aplicação para autenticação real...');
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
+  };
+
+  const handleClearCredentials = () => {
+    localStorage.removeItem('VITE_SUPABASE_URL');
+    localStorage.removeItem('VITE_SUPABASE_ANON_KEY');
+    setInputUrl('');
+    setInputKey('');
+    onShowMessage('Configurações Desfeitas!', 'Os cadastros em cache local foram deletados. Voltando ao setup original das variáveis de ambiente.');
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
+  };
+
   const fetchAllStats = async () => {
     setIsLoading(true);
     try {
@@ -265,6 +305,61 @@ export default function SupabaseDiagnostics({ isOpen, onClose, onShowMessage }: 
                   <p className="text-xs text-blue-800 mt-2">
                     O applet detecta a presença destas credenciais e se sincroniza dinamicamente em tempo real!
                   </p>
+                </div>
+              </div>
+
+              {/* Credential input form for super resilient connection */}
+              <div className="bg-white border border-[#cfdbec] p-6 rounded-2xl shadow-sm text-left space-y-4">
+                <div className="flex items-center gap-2 text-sm font-bold text-[#101c29] uppercase">
+                  <Sparkles className="w-4 h-4 text-emerald-500 animate-pulse" />
+                  <span>Configuração e Diagnóstico das Chaves</span>
+                </div>
+                <p className="text-xs text-secondary leading-normal">
+                  Se você salvou as credenciais no painel do AI Studio mas a verificação automática falha devido as aspas, cache do Vite ou restrições de deploy, você pode preencher os campos abaixo. Eles serão salvos no armazenamento local do seu navegador para habilitar o login e cadastro diretamente em tempo real!
+                </p>
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-gray-500 uppercase tracking-wider mb-1">
+                      SUPABASE URL (VITE_SUPABASE_URL)
+                    </label>
+                    <input
+                      type="text"
+                      value={inputUrl}
+                      onChange={(e) => setInputUrl(e.target.value)}
+                      placeholder="Ex: https://xxxxxx.supabase.co"
+                      className="w-full text-xs font-mono p-2.5 rounded-lg border border-[#cfdbec] focus:outline-none focus:ring-2 focus:ring-[#3ecf8e]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-gray-500 uppercase tracking-wider mb-1">
+                      SUPABASE ANON KEY (VITE_SUPABASE_ANON_KEY)
+                    </label>
+                    <input
+                      type="text"
+                      value={inputKey}
+                      onChange={(e) => setInputKey(e.target.value)}
+                      placeholder="Insira sua anon public key completa..."
+                      className="w-full text-xs font-mono p-2.5 rounded-lg border border-[#cfdbec] focus:outline-none focus:ring-2 focus:ring-[#3ecf8e]"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={handleSaveCredentials}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-sm ml-auto"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    Salvar e Conectar Agora
+                  </button>
+                  {(localStorage.getItem('VITE_SUPABASE_URL') || localStorage.getItem('VITE_SUPABASE_ANON_KEY')) && (
+                    <button
+                      onClick={handleClearCredentials}
+                      className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Limpar Sobregravação
+                    </button>
+                  )}
                 </div>
               </div>
 

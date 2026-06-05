@@ -1,17 +1,44 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Load and sanitize Supabase configuration
+// Load and sanitize Supabase configuration with recursive quote stripping
 const cleanEnvVar = (val: string): string => {
   let cleaned = (val || '').trim();
-  // Strip starting/ending quotes if present (e.g. "https://..." or 'https://...')
-  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
-    cleaned = cleaned.slice(1, -1).trim();
+  
+  // Recursively clean up wrapping quotes of any kind (single, double, backticks)
+  while (
+    cleaned.startsWith('"') || 
+    cleaned.endsWith('"') || 
+    cleaned.startsWith("'") || 
+    cleaned.endsWith("'") ||
+    cleaned.startsWith('`') ||
+    cleaned.endsWith('`')
+  ) {
+    if (cleaned.startsWith('"')) cleaned = cleaned.substring(1);
+    if (cleaned.endsWith('"')) cleaned = cleaned.substring(0, cleaned.length - 1);
+    if (cleaned.startsWith("'")) cleaned = cleaned.substring(1);
+    if (cleaned.endsWith("'")) cleaned = cleaned.substring(0, cleaned.length - 1);
+    if (cleaned.startsWith('`')) cleaned = cleaned.substring(1);
+    if (cleaned.endsWith('`')) cleaned = cleaned.substring(0, cleaned.length - 1);
+    cleaned = cleaned.trim();
   }
   return cleaned;
 };
 
-const rawUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// First try to load from localStorage (supports overriding directly in Web UI)
+const getStorageVal = (key: string): string => {
+  try {
+    return typeof localStorage !== 'undefined' ? (localStorage.getItem(key) || '') : '';
+  } catch (e) {
+    return '';
+  }
+};
+
+const rawUrl = getStorageVal('VITE_SUPABASE_URL') || 
+               import.meta.env.VITE_SUPABASE_URL || 
+               (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : '') || '';
+const rawKey = getStorageVal('VITE_SUPABASE_ANON_KEY') || 
+                import.meta.env.VITE_SUPABASE_ANON_KEY || 
+                (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_ANON_KEY : '') || '';
 
 const supabaseUrl = cleanEnvVar(rawUrl).replace(/\/$/, ''); // Remove trailing slashes
 const supabaseAnonKey = cleanEnvVar(rawKey);
@@ -20,7 +47,9 @@ export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
   supabaseAnonKey && 
   supabaseUrl !== 'https://your-supabase-project.supabase.co' && 
-  supabaseAnonKey !== 'your-anon-public-key'
+  supabaseAnonKey !== 'your-anon-public-key' &&
+  !supabaseUrl.includes('placeholder-project-id') &&
+  !supabaseAnonKey.includes('placeholder-anon-key')
 );
 
 // Safe console diagnostics to help debug without exposing secret keys

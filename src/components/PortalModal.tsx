@@ -48,6 +48,11 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState<string>('financeiro');
 
+  // Inline Supabase configurations
+  const [inlineUrl, setInlineUrl] = useState(() => localStorage.getItem('VITE_SUPABASE_URL') || '');
+  const [inlineKey, setInlineKey] = useState(() => localStorage.getItem('VITE_SUPABASE_ANON_KEY') || '');
+  const [showInlineSetup, setShowInlineSetup] = useState(false);
+
   // Registration & profile states
   const [formTab, setFormTab] = useState<'login' | 'register' | 'esqueci-senha' | 'alterar-senha'>('login');
   const [profileType, setProfileType] = useState<string>('Morador');
@@ -1143,18 +1148,85 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
               )}
 
               {/* Database sync status info indicator */}
-              <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-[10px]">
-                <span className="text-secondary font-medium">Serviço de Autenticação:</span>
-                {isSupabaseConfigured && supabase ? (
-                  <span className="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Supabase Cloud Ativo
-                  </span>
-                ) : (
-                  <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                    Sandbox Offline (Local)
-                  </span>
+              <div className="mt-4 pt-3 border-t border-gray-100 flex flex-col gap-2 text-[10px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary font-medium">Serviço de Autenticação:</span>
+                  {isSupabaseConfigured && supabase ? (
+                    <span className="text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Supabase Cloud Ativo
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowInlineSetup(!showInlineSetup)}
+                      className="text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                      Conectar Supabase Real ⚙️
+                    </button>
+                  )}
+                </div>
+
+                {!isSupabaseConfigured && showInlineSetup && (
+                  <div className="bg-[#fcf8f2] border border-amber-200 rounded-xl p-3.5 mt-1 text-left space-y-2">
+                    <p className="font-extrabold text-[#9c510e] uppercase text-[9px] block">⚙️ Configurar Meu Supabase Real</p>
+                    <p className="text-[9px] text-[#805020] leading-normal font-sans">
+                      Insira sua URL e Anon Key do Supabase abaixo. Elas serão salvas no seu navegador para habilitar a autenticação real imediatamente!
+                    </p>
+                    <div className="space-y-1.5">
+                      <div>
+                        <label className="text-[8px] font-bold text-[#805020] uppercase block mb-0.5">SUPABASE URL</label>
+                        <input
+                          type="text"
+                          value={inlineUrl}
+                          onChange={(e) => setInlineUrl(e.target.value)}
+                          placeholder="Ex: https://xxxxxx.supabase.co"
+                          className="w-full bg-white border border-amber-300 outline-none p-1.5 rounded text-[10px] font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-bold text-[#805020] uppercase block mb-0.5">SUPABASE ANON KEY</label>
+                        <input
+                          type="text"
+                          value={inlineKey}
+                          onChange={(e) => setInlineKey(e.target.value)}
+                          placeholder="Cole sua anon public key completa..."
+                          className="w-full bg-white border border-amber-300 outline-none p-1.5 rounded text-[10px] font-mono"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!inlineUrl.trim() || !inlineKey.trim()) {
+                            alert('Por favor, preencha a URL e a Anon Key para estabelecer a conexão.');
+                            return;
+                          }
+                          
+                          let sanitizedUrl = inlineUrl.trim();
+                          while (sanitizedUrl.startsWith('"') || sanitizedUrl.endsWith('"') || sanitizedUrl.startsWith("'") || sanitizedUrl.endsWith("'")) {
+                            sanitizedUrl = sanitizedUrl.replace(/^['"]|['"]$/g, '').trim();
+                          }
+                          sanitizedUrl = sanitizedUrl.replace(/\/$/, '');
+
+                          let sanitizedKey = inlineKey.trim();
+                          while (sanitizedKey.startsWith('"') || sanitizedKey.endsWith('"') || sanitizedKey.startsWith("'") || sanitizedKey.endsWith("'")) {
+                            sanitizedKey = sanitizedKey.replace(/^['"]|['"]$/g, '').trim();
+                          }
+
+                          localStorage.setItem('VITE_SUPABASE_URL', sanitizedUrl);
+                          localStorage.setItem('VITE_SUPABASE_ANON_KEY', sanitizedKey);
+                          onShowNotification('Sucesso!', 'Credenciais salvas no navegador! Recarregando a página para conectar...');
+                          setTimeout(() => {
+                            window.location.reload();
+                          }, 1200);
+                        }}
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white font-extrabold py-2 rounded text-[10px] cursor-pointer text-center"
+                      >
+                        Salvar e Conectar Agora
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
