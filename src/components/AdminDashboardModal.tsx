@@ -979,7 +979,7 @@ export default function AdminDashboardModal({
         )}
 
         {/* MAIN BODY CORE */}
-        <div id="admin-main-body" className="overflow-hidden grid grid-cols-1 md:grid-cols-[280px_1fr] h-full w-full">
+        <div id="admin-main-body" className="overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] h-full w-full">
           
           {/* LEFT DYNAMIC SIDEBAR MENU (Premium Dark Theme: #061426) */}
           <div className="w-full bg-[#061426] border-r border-white/5 flex flex-col overflow-y-auto shrink-0 select-none">
