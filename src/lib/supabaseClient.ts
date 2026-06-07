@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 5. Tabela de Perfis de Usuários
+-- 5. Tabela de Perfis de Usuários (Tabela Primária 'perfis' para compatibilidade do app)
 CREATE TABLE IF NOT EXISTS perfis (
   id UUID PRIMARY KEY,
   auth_user_id UUID NOT NULL,
@@ -145,6 +145,25 @@ CREATE TABLE IF NOT EXISTS perfis (
 ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS cpf TEXT;
 ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS unidade TEXT;
 ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS perfil TEXT;
+
+-- 5b. Tabela 'perfil' (Singular) - Conforme solicitado para compatibilidade direta e trigger dedicada
+CREATE TABLE IF NOT EXISTS perfil (
+  id UUID PRIMARY KEY,
+  nome TEXT NOT NULL,
+  email TEXT NOT NULL,
+  cpf TEXT,
+  tipo TEXT NOT NULL,
+  unidade TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Garante que todas as colunas existem na tabela 'perfil' (singular)
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS id UUID;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS nome TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS cpf TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS tipo TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS unidade TEXT;
 
 -- 6. Tabela de Condomínios
 CREATE TABLE IF NOT EXISTS condominios (
@@ -285,24 +304,45 @@ CREATE POLICY "Permitir inserções públicas de perfis" ON perfis FOR INSERT WI
 CREATE POLICY "Permitir atualização do próprio perfil" ON perfis FOR UPDATE USING (auth.uid() = auth_user_id);
 CREATE POLICY "Permitir tudo para simulação de perfis" ON perfis FOR ALL USING (true);
 
--- 6. Trigger automático de Sincronização de Cadastro pós-Auth
+-- Políticas de RLS para a tabela 'perfil' (singular)
+ALTER TABLE perfil ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir leitura de perfil singular" ON perfil FOR SELECT USING (true);
+CREATE POLICY "Permitir inserções públicas de perfil singular" ON perfil FOR INSERT WITH CHECK (true);
+CREATE POLICY "Permitir atualização do próprio perfil singular" ON perfil FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Permitir tudo para simulação de perfil singular" ON perfil FOR ALL USING (true);
+
+-- 6. Trigger automático de Sincronização de Cadastro pós-Auth (Grava em perfis e perfil)
 -- Execute este bloco para garantir que, caso o e-mail exija confirmação,
 -- o perfil correspondente seja injetado direto no banco pelo servidor Postgres.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
+  -- Inserção na tabela 'perfis' (plural) usada pelo aplicativo
   INSERT INTO public.perfis (id, auth_user_id, nome, cpf, email, unidade, tipo, perfil)
   VALUES (
     new.id,
     new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', 'Usuário'),
+    coalesce(new.raw_user_meta_data->>'full_name', coalesce(new.raw_user_meta_data->>'nome', 'Usuário Novo')),
     coalesce(new.raw_user_meta_data->>'cpf', ''),
     new.email,
-    coalesce(new.raw_user_meta_data->>'unit', 'Apto Geral'),
+    coalesce(new.raw_user_meta_data->>'unit', coalesce(new.raw_user_meta_data->>'unidade', 'Apto Geral')),
     coalesce(lower(replace(replace(replace(new.raw_user_meta_data->>'profile', 'síndico', 'sindico'), 'subsíndico', 'subsindico'), 'proprietário', 'proprietario')), 'morador'),
     coalesce(new.raw_user_meta_data->>'profile', 'Morador')
   )
   ON CONFLICT (id) DO NOTHING;
+
+  -- Inserção na tabela 'perfil' (singular) com as colunas: id, nome, email, cpf, tipo, unidade
+  INSERT INTO public.perfil (id, nome, email, cpf, tipo, unidade)
+  VALUES (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'full_name', coalesce(new.raw_user_meta_data->>'nome', 'Usuário Novo')),
+    new.email,
+    coalesce(new.raw_user_meta_data->>'cpf', ''),
+    coalesce(lower(replace(replace(replace(new.raw_user_meta_data->>'profile', 'síndico', 'sindico'), 'subsíndico', 'subsindico'), 'proprietário', 'proprietario')), 'morador'),
+    coalesce(new.raw_user_meta_data->>'unit', coalesce(new.raw_user_meta_data->>'unidade', 'Apto Geral'))
+  )
+  ON CONFLICT (id) DO NOTHING;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
