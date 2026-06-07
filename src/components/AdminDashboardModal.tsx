@@ -697,8 +697,8 @@ export default function AdminDashboardModal({
   };
 
   return (
-    <div id="admin-dashboard-overlay" className="fixed inset-0 bg-[#070b12] z-50 flex items-stretch justify-stretch overflow-y-auto animate-fade-in font-sans">
-      <div id="admin-dashboard-card" className="bg-white w-full h-screen border-none shadow-none overflow-hidden flex flex-col">
+    <div id="admin-dashboard-overlay" className="fixed inset-0 bg-[#070b12] z-50 grid grid-cols-1 items-stretch justify-stretch animate-fade-in font-sans overflow-hidden">
+      <div id="admin-dashboard-card" className="bg-white w-full h-screen border-none shadow-none overflow-hidden grid grid-rows-[auto_auto_1fr]">
         
         {/* UPPER SENSITIVE REAL-TIME SECURITY PLAYGROUND SWITCHER */}
         {!currentUser ? (
@@ -796,10 +796,10 @@ export default function AdminDashboardModal({
         </div>
 
         {/* MAIN BODY CORE */}
-        <div className="flex-1 overflow-hidden flex flex-col md:flex-row h-full">
+        <div id="admin-main-body" className="overflow-hidden grid grid-cols-1 md:grid-cols-[16rem_1fr] h-full w-full">
           
           {/* LEFT DYNAMIC SIDEBAR MENU */}
-          <div className="w-full md:w-64 bg-[#0a111a] border-r border-white/5 p-4 flex flex-col shrink-0">
+          <div className="w-full bg-[#0a111a] border-r border-white/5 p-4 flex flex-col overflow-y-auto md:overflow-y-visible">
             <div className="mb-4 hidden md:block">
               <p className="text-[10px] text-gray-500 uppercase font-black tracking-wider text-left pl-1">Menú Dinâmico do Perfil</p>
             </div>
@@ -837,7 +837,7 @@ export default function AdminDashboardModal({
           </div>
 
           {/* RIGHT PANELS WORKSPACE */}
-          <div className="flex-1 bg-slate-50 overflow-y-auto p-4 md:p-8">
+          <div className="min-w-0 bg-slate-50 overflow-y-auto p-4 md:p-8 h-full">
             
             {/* 1. VIEW DETAILED INDIVIDUAL CONDOMINIUM */}
             {selectedCondoId && activeDetailedCondo ? (
