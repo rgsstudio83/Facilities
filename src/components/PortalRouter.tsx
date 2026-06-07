@@ -143,8 +143,32 @@ export async function ensureAndGetProfile(authUser: any): Promise<UserProfile | 
       cpf: cpf
     };
 
-    console.log('[ensureAndGetProfile] Criando perfil ausente pós-autenticação para o usuário:', authUser.id, insertPayload);
+    console.log('[ensureAndGetProfile] Criando/Sincronizando perfil pós-autenticação para o usuário:', authUser.id, insertPayload);
     
+    // Salva ou atualiza o cache local para login instantâneo usando CPF
+    try {
+      const cleanCpf = cpf.replace(/\D/g, '');
+      if (cleanCpf) {
+        const cacheKey = 'facilities_perfis_cpf_cache';
+        const cacheRaw = localStorage.getItem(cacheKey);
+        let cpfCache: Record<string, any> = {};
+        if (cacheRaw) {
+          try { cpfCache = JSON.parse(cacheRaw); } catch { cpfCache = {}; }
+        }
+        cpfCache[cleanCpf] = {
+          email: email.trim(),
+          nome: name.trim(),
+          unidade: unit.trim(),
+          tipo: normalizedRole,
+          perfil: rawRole,
+          auth_user_id: authUser.id
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cpfCache));
+      }
+    } catch (e) {
+      console.warn('Erro ao atualizar cache local de CPF em ensureAndGetProfile:', e);
+    }
+
     // Tenta inserir o perfil completo com permissão do usuário autenticado no RLS
     let { error: insertError } = await supabase.from('perfis').upsert(insertPayload);
     
@@ -578,6 +602,32 @@ export function PortalRouterProvider({
           tipo: normalizedRole,
           perfil: role
         };
+
+        // Salva imediatamente no cache local associando o CPF ao e-mail para que logins futuros via CPF
+        // funcionem imediatamente enquanto o e-mail não é confirmado ou mesmo se o RLS bloquear acessos anon.
+        try {
+          const cleanCpf = cpf.replace(/\D/g, '');
+          if (cleanCpf) {
+            const cacheKey = 'facilities_perfis_cpf_cache';
+            const cacheRaw = localStorage.getItem(cacheKey);
+            let cpfCache: Record<string, any> = {};
+            if (cacheRaw) {
+              try { cpfCache = JSON.parse(cacheRaw); } catch { cpfCache = {}; }
+            }
+            cpfCache[cleanCpf] = {
+              email: email.trim(),
+              nome: name.trim(),
+              unidade: unit.trim(),
+              tipo: normalizedRole,
+              perfil: role,
+              auth_user_id: data.user.id
+            };
+            localStorage.setItem(cacheKey, JSON.stringify(cpfCache));
+            console.log('[signUp] Perfil CPF armazenado com sucesso no cache local:', cleanCpf);
+          }
+        } catch (cacheErr) {
+          console.warn('Erro ao atualizar cache local de CPFs em signUp:', cacheErr);
+        }
 
         // tenta inserir o payload completo primeiro
         let { error: insertError } = await supabase.from('perfis').upsert(fullPayload);

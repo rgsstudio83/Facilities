@@ -148,36 +148,12 @@ export default function AdminDashboardModal({
     }
   }, [isOpen, initialProfile, currentUser]);
 
-  // Simulated Database states
-  const [condos, setCondos] = useState<Condominio[]>([
-    { id: 'cd-1', nome: 'Condomínio Vista Parque', cnpj: '12.345.678/0001-90', endereco: 'Av. Paulista, 1000 - Bela Vista', cidade: 'São Paulo', estado: 'SP', sindico: 'Roberto Silveira', unidades: 120, moradores: 380, proprietarios: 112, receita: 145000, despesa: 123500, inadimplenciaPercent: 12.0, status: 'Alerta' },
-    { id: 'cd-2', nome: 'Residencial Solar da Barra', cnpj: '98.765.432/0001-10', endereco: 'Av. Lúcio Costa, 2500 - Barra', cidade: 'Rio de Janeiro', estado: 'RJ', sindico: 'Adriana Montes', unidades: 80, moradores: 240, proprietarios: 76, receita: 110000, despesa: 98000, inadimplenciaPercent: 6.0, status: 'Normal' },
-    { id: 'cd-3', nome: 'Parque das Amoreiras', cnpj: '45.678.901/0001-22', endereco: 'Rua das Hortênsias, 4503', cidade: 'Campinas', estado: 'SP', sindico: 'Marcos Vinícius', unidades: 160, moradores: 490, proprietarios: 151, receita: 180000, despesa: 195000, inadimplenciaPercent: 21.0, status: 'Crítico' },
-    { id: 'cd-4', nome: 'Belo Horizonte Corporate', cnpj: '67.890.123/0001-44', endereco: 'Av. Afonso Pena, 3200', cidade: 'Belo Horizonte', estado: 'MG', sindico: 'Beatriz Mendes', unidades: 60, moradores: 110, proprietarios: 58, receita: 95000, despesa: 81000, inadimplenciaPercent: 3.0, status: 'Normal' }
-  ]);
-
-  const [moradoresList, setMoradoresList] = useState<MoradorUnit[]>([
-    { id: 'm-1', nome: 'Carlos Alberto Costa', cpf: '123.456.789-00', unidade: 'Apto 41-B', condominioId: 'cd-1', proprietario: false, telefone: '(11) 98765-4321' },
-    { id: 'm-2', nome: 'Sandra Moura Albuquerque', cpf: '987.654.321-11', unidade: 'Apto 102', condominioId: 'cd-1', proprietario: true, telefone: '(11) 97777-6666' },
-    { id: 'm-3', nome: 'Felipe Rezende Dias', cpf: '444.555.666-22', unidade: 'Apto 203', condominioId: 'cd-2', proprietario: true, telefone: '(21) 99988-1122' },
-    { id: 'm-4', nome: 'Gisela Santos Pires', cpf: '333.222.111-88', unidade: 'Apto 12', condominioId: 'cd-3', proprietario: false, telefone: '(19) 98111-2233' }
-  ]);
-
-  const [auditLogs, setAuditLogs] = useState<AuditoriaLog[]>([
-    { id: 'log-1', data: '04/06/2026', hora: '03:15:22', quem: 'Cristhiane Xavier', perfil: 'Administrador', acao: 'CRIAR', entidade: 'condominios', detalhes: 'Criado Condomínio Vista Parque com 120 unidades' },
-    { id: 'log-2', data: '04/06/2026', hora: '03:17:40', quem: 'Roberto Silveira', perfil: 'Síndico', acao: 'EDITAR', entidade: 'reservas', detalhes: 'Aprovada reserva de Churrasqueira Superior para Unidade Apto 41-B' },
-    { id: 'log-3', data: '04/06/2026', hora: '03:52:10', quem: 'Colaborador Facilities', perfil: 'Colaborador', acao: 'CRIAR', entidade: 'moradores', detalhes: 'Morador Carlos Alberto Costa inserido na unidade Apto 41-B' },
-  ]);
-
-  const [visitantes, setVisitantes] = useState<Visitante[]>([
-    { id: 'v-1', nome: 'Marcos de Souza', rg: '12.345.678-9', unidade: 'Apto 41-B', condominioId: 'cd-1', dataEntrada: '04/06/2026 08:30', status: 'Liberado' },
-    { id: 'v-2', nome: 'Ana Julia Pereira', rg: '23.456.789-0', unidade: 'Apto 102', condominioId: 'cd-1', dataEntrada: '04/06/2026 09:15', status: 'Concluído', dataSaida: '04/06/2026 10:45' }
-  ]);
-
-  const [encomendas, setEncomendas] = useState<Encomenda[]>([
-    { id: 'e-1', destinatario: 'Sandra Moura', unidade: 'Apto 102', condominioId: 'cd-1', descricao: 'Caixa Pequena (Mercado Livre)', transportadora: 'Loggi', dataRegistro: '04/06/2026 09:00', status: 'Aguardando' },
-    { id: 'e-2', destinatario: 'Carlos Alberto', unidade: 'Apto 41-B', condominioId: 'cd-1', descricao: 'Envelope Documentos', transportadora: 'Correios', dataRegistro: '03/06/2026 14:00', status: 'Retirada', dataRetirada: '03/06/2026 18:30' }
-  ]);
+  // Simulated Database states - Initialized to empty to avoid showing fictitious data, only showing Supabase records
+  const [condos, setCondos] = useState<Condominio[]>([]);
+  const [moradoresList, setMoradoresList] = useState<MoradorUnit[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditoriaLog[]>([]);
+  const [visitantes, setVisitantes] = useState<Visitante[]>([]);
+  const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
 
   // Form submission states
   const [newCondoName, setNewCondoName] = useState('');
@@ -210,7 +186,123 @@ export default function AdminDashboardModal({
   // For Porteiro: locked out of Finance lists & reports completely.
   const isPorteiroRole = activeProfile === 'porteiro';
 
-  // Logs actions to Audit table
+  // State synchronization with Supabase Tables
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const fetchAdminData = async () => {
+      if (!isSupabaseConfigured || !supabase) {
+        setCondos([]);
+        setMoradoresList([]);
+        setAuditLogs([]);
+        setVisitantes([]);
+        setEncomendas([]);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        // Fetch Condominios
+        const { data: dbCondos, error: errCondos } = await supabase.from('condominios').select('*');
+        if (dbCondos && !errCondos) {
+          setCondos(dbCondos.map((c: any) => ({
+            id: c.id,
+            nome: c.nome,
+            cnpj: c.cnpj || '',
+            endereco: c.endereco || '',
+            cidade: c.cidade || '',
+            estado: c.estado || '',
+            sindico: c.sindico || '',
+            unidades: Number(c.unidades || 0),
+            moradores: Number(c.moradores || 0),
+            proprietarios: Number(c.proprietarios || 0),
+            receita: Number(c.receita || 0),
+            despesa: Number(c.despesa || 0),
+            inadimplenciaPercent: Number(c.inadimplencia_percent || 0),
+            status: c.status || 'Normal'
+          })));
+        } else {
+          setCondos([]);
+        }
+
+        // Fetch Moradores
+        const { data: dbMoradores, error: errMoradores } = await supabase.from('moradores').select('*');
+        if (dbMoradores && !errMoradores) {
+          setMoradoresList(dbMoradores.map((m: any) => ({
+            id: m.id,
+            nome: m.nome,
+            cpf: m.cpf || '',
+            unidade: m.unidade || '',
+            condominioId: m.condominio_id || 'cd-1',
+            proprietario: m.proprietario ?? true,
+            telefone: m.telefone || ''
+          })));
+        } else {
+          setMoradoresList([]);
+        }
+
+        // Fetch Visitantes
+        const { data: dbVisitantes, error: errVisitantes } = await supabase.from('visitantes').select('*');
+        if (dbVisitantes && !errVisitantes) {
+          setVisitantes(dbVisitantes.map((v: any) => ({
+            id: v.id,
+            nome: v.nome,
+            rg: v.rg || '',
+            unidade: v.unidade || '',
+            condominioId: v.condominio_id || 'cd-1',
+            dataEntrada: v.data_entrada || '',
+            dataSaida: v.data_saida || undefined,
+            status: v.status || 'Liberado'
+          })));
+        } else {
+          setVisitantes([]);
+        }
+
+        // Fetch Encomendas
+        const { data: dbEncomendas, error: errEncomendas } = await supabase.from('encomendas').select('*');
+        if (dbEncomendas && !errEncomendas) {
+          setEncomendas(dbEncomendas.map((e: any) => ({
+            id: e.id,
+            destinatario: e.destinatario,
+            unidade: e.unidade || '',
+            condominioId: e.condominio_id || 'cd-1',
+            descricao: e.descricao || '',
+            transportadora: e.transportadora || '',
+            dataRegistro: e.data_registro || '',
+            dataRetirada: e.data_retirada || undefined,
+            status: e.status || 'Aguardando'
+          })));
+        } else {
+          setEncomendas([]);
+        }
+
+        // Fetch Auditoria logs
+        const { data: dbAudit, error: errAudit } = await supabase.from('auditoria').select('*').order('created_at', { ascending: false });
+        if (dbAudit && !errAudit) {
+          setAuditLogs(dbAudit.map((a: any) => ({
+            id: a.id,
+            data: a.data,
+            hora: a.hora,
+            quem: a.quem,
+            perfil: a.perfil,
+            acao: a.acao || 'CRIAR',
+            entidade: a.entidade,
+            detalhes: a.detalhes || ''
+          })));
+        } else {
+          setAuditLogs([]);
+        }
+      } catch (err) {
+        console.warn('Erro ao ler tabelas administrativas no Supabase:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAdminData();
+  }, [isOpen]);
+
+  // Logs actions to Audit table and Supabase
   const addAuditLog = (action: 'CRIAR' | 'EDITAR' | 'EXCLUIR' | 'BLOQUEIO' | 'EXPORTAR', entity: string, details: string) => {
     const now = new Date();
     const newLog: AuditoriaLog = {
@@ -224,6 +316,21 @@ export default function AdminDashboardModal({
       detalhes: details
     };
     setAuditLogs(prev => [newLog, ...prev]);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('auditoria').insert({
+        id: newLog.id,
+        data: newLog.data,
+        hora: newLog.hora,
+        quem: newLog.quem,
+        perfil: newLog.perfil,
+        acao: newLog.acao,
+        entidade: newLog.entidade,
+        detalhes: newLog.detalhes
+      }).then(({ error }) => {
+        if (error) console.error('Erro ao registrar log de auditoria no Supabase:', error.message);
+      });
+    }
   };
 
   // Automated menu navigation changer when active profile changes
@@ -283,6 +390,28 @@ export default function AdminDashboardModal({
 
     setCondos(prev => [...prev, newC]);
     addAuditLog('CRIAR', 'condominios', `Criado novo condomínio: ${newCondoName} (Unidades: ${newCondoUnidades})`);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('condominios').insert({
+        id: newC.id,
+        nome: newC.nome,
+        cnpj: newC.cnpj,
+        endereco: newC.endereco,
+        cidade: newC.cidade,
+        estado: newC.estado,
+        sindico: newC.sindico,
+        unidades: newC.unidades,
+        moradores: newC.moradores,
+        proprietarios: newC.proprietarios,
+        receita: newC.receita,
+        despesa: newC.despesa,
+        inadimplencia_percent: newC.inadimplenciaPercent,
+        status: newC.status
+      }).then(({ error }) => {
+        if (error) console.error('Erro ao salvar condomínio no Supabase:', error.message);
+      });
+    }
+
     onShowMessage("Sucesso", "Novo condomínio registrado com sucesso.");
     setNewCondoName('');
     setNewCondoCnpj('');
@@ -293,6 +422,13 @@ export default function AdminDashboardModal({
     if (!verifyWritePermission(['admin'], `Deletar Condomínio - ID: ${id}`)) return;
     setCondos(prev => prev.filter(c => c.id !== id));
     addAuditLog('EXCLUIR', 'condominios', `Excluído condomínio: ${name}`);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('condominios').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Erro ao excluir condomínio no Supabase:', error.message);
+      });
+    }
+
     onShowMessage("Sucesso", "Condomínio desativado do sistema.");
   };
 
@@ -301,7 +437,6 @@ export default function AdminDashboardModal({
     if (!verifyWritePermission(['admin', 'colaborador'], 'Cadastrar Morador')) return;
     if (!newMoradorNome.trim() || !newMoradorUnidade.trim()) return;
 
-    // RLS Enforcement: Síndico cannot create global residents, simulated role checks:
     const newM: MoradorUnit = {
       id: `m-${Date.now()}`,
       nome: newMoradorNome,
@@ -314,6 +449,21 @@ export default function AdminDashboardModal({
 
     setMoradoresList(prev => [...prev, newM]);
     addAuditLog('CRIAR', 'moradores', `Cadastrado residente: ${newMoradorNome} na unidade ${newMoradorUnidade}`);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('moradores').insert({
+        id: newM.id,
+        nome: newM.nome,
+        cpf: newM.cpf,
+        unidade: newM.unidade,
+        condominio_id: newM.condominioId,
+        proprietario: newM.proprietario,
+        telefone: newM.telefone
+      }).then(({ error }) => {
+        if (error) console.error('Erro ao salvar morador no Supabase:', error.message);
+      });
+    }
+
     onShowMessage("Sucesso", "Novo morador inserido com sucesso.");
     setNewMoradorNome('');
     setNewMoradorCpf('');
@@ -324,6 +474,13 @@ export default function AdminDashboardModal({
     if (!verifyWritePermission(['admin'], `Excluir Morador - ID: ${id}`)) return;
     setMoradoresList(prev => prev.filter(m => m.id !== id));
     addAuditLog('EXCLUIR', 'moradores', `Excluído morador: ${name}`);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('moradores').delete().eq('id', id).then(({ error }) => {
+        if (error) console.error('Erro ao excluir morador no Supabase:', error.message);
+      });
+    }
+
     onShowMessage("Sucesso", "Morador removido da base.");
   };
 
@@ -344,6 +501,21 @@ export default function AdminDashboardModal({
 
     setVisitantes(prev => [newV, ...prev]);
     addAuditLog('CRIAR', 'visitantes', `Registrado visitante ${newVisitorNome} liberado para a unidade ${newVisitorUnidade}`);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('visitantes').insert({
+        id: newV.id,
+        nome: newV.nome,
+        rg: newV.rg,
+        unidade: newV.unidade,
+        condominio_id: newV.condominioId,
+        data_entrada: newV.dataEntrada,
+        status: newV.status
+      }).then(({ error }) => {
+        if (error) console.error('Erro ao salvar visitante no Supabase:', error.message);
+      });
+    }
+
     onShowMessage("Visitante Registrado", `Entrada liberada sob crachá de segurança.`);
     setNewVisitorNome('');
     setNewVisitorRg('');
@@ -352,13 +524,25 @@ export default function AdminDashboardModal({
 
   const handleOutVisitor = (id: string, nome: string) => {
     if (!verifyWritePermission(['admin', 'colaborador', 'porteiro', 'sindico', 'subsindico'], `Registrar Saída Visitante - ID: ${id}`)) return;
+    const outTime = new Date().toLocaleString('pt-BR', { hour12: false });
+    
     setVisitantes(prev => prev.map(v => v.id === id ? { 
       ...v, 
       status: 'Concluído', 
-      dataSaida: new Date().toLocaleString('pt-BR', { hour12: false }) 
+      dataSaida: outTime 
     } : v));
     addAuditLog('EDITAR', 'visitantes', `Registrada saída do visitante: ${nome}`);
-    onShowMessage("Portaria Atualizada", `Saída registrada com sucesso.`);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('visitantes').update({
+        status: 'Concluído',
+        data_saida: outTime
+      }).eq('id', id).then(({ error }) => {
+        if (error) console.error('Erro ao atualizar saída de visitante no Supabase:', error.message);
+      });
+    }
+
+    onShowMessage("Portaria Updated", `Saída registrada com sucesso.`);
   };
 
   const handleCreatePackage = (e: FormEvent) => {
@@ -379,6 +563,22 @@ export default function AdminDashboardModal({
 
     setEncomendas(prev => [newP, ...prev]);
     addAuditLog('CRIAR', 'encomendas', `Recebida encomenda para ${newPackageDest} (${newPackageUnidade})`);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('encomendas').insert({
+        id: newP.id,
+        destinatario: newP.destinatario,
+        unidade: newP.unidade,
+        condominio_id: newP.condominioId,
+        descricao: newP.descricao,
+        transportadora: newP.transportadora,
+        data_registro: newP.dataRegistro,
+        status: newP.status
+      }).then(({ error }) => {
+        if (error) console.error('Erro ao registrar encomenda no Supabase:', error.message);
+      });
+    }
+
     onShowMessage("Encomenda Registrada", `Notificação de pacote enviada.`);
     setNewPackageDest('');
     setNewPackageUnidade('');
@@ -388,12 +588,24 @@ export default function AdminDashboardModal({
 
   const handleDeliverPackage = (id: string, dest: string) => {
     if (!verifyWritePermission(['admin', 'colaborador', 'porteiro', 'sindico'], `Entregar Encomenda - ID: ${id}`)) return;
+    const deliverTime = new Date().toLocaleString('pt-BR', { hour12: false });
+
     setEncomendas(prev => prev.map(p => p.id === id ? { 
       ...p, 
       status: 'Retirada', 
-      dataRetirada: new Date().toLocaleString('pt-BR', { hour12: false }) 
+      dataRetirada: deliverTime 
     } : p));
     addAuditLog('EDITAR', 'encomendas', `Entregue encomenda para ${dest}`);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('encomendas').update({
+        status: 'Retirada',
+        data_retirada: deliverTime
+      }).eq('id', id).then(({ error }) => {
+        if (error) console.error('Erro ao atualizar entrega de encomenda no Supabase:', error.message);
+      });
+    }
+
     onShowMessage("Status Entrega", `Encomenda retirada pelo condômino.`);
   };
 

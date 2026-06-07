@@ -44,7 +44,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('Roberto Silva');
   const [apartmentCode, setApartmentCode] = useState('Apto 41-B');
-  const [cpf, setCpf] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState<string>('financeiro');
 
@@ -125,52 +125,10 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   });
 
   // --- Administrative and Collaborator States ---
-  const [condos, setCondos] = useState<any[]>(() => {
-    const saved = localStorage.getItem('facilities_portal_condos');
-    if (saved) {
-      try { return JSON.parse(saved); } catch(e) {}
-    }
-    return [
-      { id: 'cd-1', nome: 'Condomínio Vista Parque', cnpj: '12.345.678/0001-90', endereco: 'Av. Paulista, 1000 - Bela Vista', cidade: 'São Paulo', estado: 'SP', sindico: 'Roberto Silveira', unidades: 120, moradores: 380, proprietarios: 112, receita: 145000, despesa: 123500, inadimplenciaPercent: 12.0, status: 'Alerta' },
-      { id: 'cd-2', nome: 'Residencial Solar da Barra', cnpj: '98.765.432/0001-10', endereco: 'Av. Lúcio Costa, 2500 - Barra', cidade: 'Rio de Janeiro', estado: 'RJ', sindico: 'Adriana Montes', unidades: 80, moradores: 240, proprietarios: 76, receita: 110000, despesa: 98000, inadimplenciaPercent: 6.0, status: 'Normal' },
-      { id: 'cd-3', nome: 'Parque das Amoreiras', cnpj: '45.678.901/0001-22', endereco: 'Rua das Hortênsias, 4503', cidade: 'Campinas', estado: 'SP', sindico: 'Marcos Vinícius', unidades: 160, moradores: 490, proprietarios: 151, receita: 180000, despesa: 195000, inadimplenciaPercent: 21.0, status: 'Crítico' },
-      { id: 'cd-4', nome: 'Belo Horizonte Corporate', cnpj: '67.890.123/0001-44', endereco: 'Av. Afonso Pena, 3200', cidade: 'Belo Horizonte', estado: 'MG', sindico: 'Beatriz Mendes', unidades: 60, moradores: 110, proprietarios: 58, receita: 95000, despesa: 81000, inadimplenciaPercent: 3.0, status: 'Normal' }
-    ];
-  });
-
-  const [visitantes, setVisitantes] = useState<any[]>(() => {
-    const saved = localStorage.getItem('facilities_portal_visitantes');
-    if (saved) {
-      try { return JSON.parse(saved); } catch(e) {}
-    }
-    return [
-      { id: 'v-1', nome: 'Marcos de Souza', rg: '12.345.678-9', unidade: 'Apto 41-B', condominioId: 'cd-1', dataEntrada: '04/06/2026 08:30', status: 'Liberado' },
-      { id: 'v-2', nome: 'Ana Julia Pereira', rg: '23.456.789-0', unidade: 'Apto 102', condominioId: 'cd-1', dataEntrada: '04/06/2026 09:15', status: 'Concluído', dataSaida: '04/06/2026 10:45' }
-    ];
-  });
-
-  const [encomendas, setEncomendas] = useState<any[]>(() => {
-    const saved = localStorage.getItem('facilities_portal_encomendas');
-    if (saved) {
-      try { return JSON.parse(saved); } catch(e) {}
-    }
-    return [
-      { id: 'e-1', destinatario: 'Sandra Moura', unidade: 'Apto 102', condominioId: 'cd-1', descricao: 'Caixa Pequena (Mercado Livre)', transportadora: 'Loggi', dataRegistro: '04/06/2026 09:00', status: 'Aguardando' },
-      { id: 'e-2', destinatario: 'Carlos Alberto', unidade: 'Apto 41-B', condominioId: 'cd-1', descricao: 'Envelope Documentos', transportadora: 'Correios', dataRegistro: '03/06/2026 14:00', status: 'Retirada', dataRetirada: '03/06/2026 18:30' }
-    ];
-  });
-
-  const [auditLogs, setAuditLogs] = useState<any[]>(() => {
-    const saved = localStorage.getItem('facilities_portal_audit_logs');
-    if (saved) {
-      try { return JSON.parse(saved); } catch(e) {}
-    }
-    return [
-      { id: 'log-1', data: '04/06/2026', hora: '03:15:22', quem: 'Drusila Xavier', perfil: 'ADMINISTRADOR', acao: 'CRIAR', entidade: 'condominios', detalhes: 'Criado Condomínio Vista Parque com 120 unidades' },
-      { id: 'log-2', data: '04/06/2026', hora: '03:17:40', quem: 'Roberto Silveira', perfil: 'SINDICO', acao: 'EDITAR', entidade: 'reservas', detalhes: 'Aprovada reserva de Churrasqueira Superior para Unidade Apto 41-B' },
-      { id: 'log-3', data: '04/06/2026', hora: '03:52:10', quem: 'Lucas Supervisor', perfil: 'COLABORADOR', acao: 'CRIAR', entidade: 'moradores', detalhes: 'Morador Carlos Alberto Costa inserido na unidade Apto 41-B' },
-    ];
-  });
+  const [condos, setCondos] = useState<any[]>([]);
+  const [visitantes, setVisitantes] = useState<any[]>([]);
+  const [encomendas, setEncomendas] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   // Admin form state variables
   const [selectedCondoId, setSelectedCondoId] = useState<string | null>(null);
@@ -324,78 +282,11 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   // Sub-dialogs
   const [barCodeModal, setBarCodeModal] = useState<Boleto | null>(null);
 
-  // In-memory persistent states for demo
-  const [boletos, setBoletos] = useState<Boleto[]>([
-    {
-      id: 'BOL-1092',
-      referencia: 'Junho/2026',
-      vencimento: '10/06/2026',
-      valor: 645.90,
-      status: 'Pendente',
-      codigoBarras: '34191.79001 01043.513184 91020.150008 7 94520000064590'
-    },
-    {
-      id: 'BOL-1081',
-      referencia: 'Maio/2026',
-      vencimento: '10/05/2026',
-      valor: 645.90,
-      status: 'Pago',
-      codigoBarras: '34191.79001 01043.513184 91020.150008 7 94520000064590'
-    },
-    {
-      id: 'BOL-1070',
-      referencia: 'Abril/2026',
-      vencimento: '10/04/2026',
-      valor: 695.90,
-      status: 'Pago',
-      codigoBarras: '34191.79001 01043.513184 91020.150008 7 94520000069590'
-    }
-  ]);
-
-  const [bookings, setBookings] = useState<Booking[]>([
-    {
-      id: 'BKG-098',
-      area: 'Churrasqueira Superior',
-      data: '13/06/2026',
-      periodo: 'Tarde',
-      status: 'Confirmado'
-    }
-  ]);
-
-  const [assemblies, setAssemblies] = useState<Assembly[]>([
-    {
-      id: 'ASM-401',
-      titulo: 'Reforma da Fachada Externa',
-      data: '18/06/2026',
-      hora: '19:30',
-      pauta: 'Deliberação e aprovação da taxa extra para pintura impermeabilizante da fachada do bloco A e B.',
-      votacaoAtiva: true,
-      perguntaVotacao: 'Aprovar taxa extra de R$ 45,00 por apartamento durante 6 meses para pintura?',
-      votosFavor: 24,
-      votosContra: 11,
-      votoUsuario: undefined
-    },
-    {
-      id: 'ASM-399',
-      titulo: 'Instalação de Câmeras na Garagem G2',
-      data: '22/04/2026',
-      hora: '20:00',
-      pauta: 'Substituição das câmeras analógicas antigas por câmeras digitais IP full HD com monitoramento.',
-      votacaoAtiva: false,
-      votoUsuario: 'Favor'
-    }
-  ]);
-
-  const [ocorrencias, setOcorrencias] = useState<Ticket[]>([
-    {
-      id: 'TKT-2900',
-      categoria: 'Manutenção',
-      titulo: 'Luz queimada no corredor do 4º andar',
-      descricao: 'A lâmpada em frente ao elevador social do bloco B está piscando e queima com frequência.',
-      dataCriacao: '01/06/2026',
-      status: 'Aberto'
-    }
-  ]);
+  // In-memory persistent states for demo - set to empty by default
+  const [boletos, setBoletos] = useState<Boleto[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [assemblies, setAssemblies] = useState<Assembly[]>([]);
+  const [ocorrencias, setOcorrencias] = useState<Ticket[]>([]);
 
   // Form states inside tabs
   const [newBookingArea, setNewBookingArea] = useState('Salão de Festas Master');
@@ -406,29 +297,22 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [newTicketCategory, setNewTicketCategory] = useState<'Manutenção' | 'Limpeza' | 'Barulho' | 'Financeiro' | 'Outros'>('Manutenção');
   const [newTicketDesc, setNewTicketDesc] = useState('');
 
-  // Sincronização inicial com o Supabase
+  // Sincronização inicial com o Supabase - Apenas dados reais do banco de dados
   useEffect(() => {
     if (!isOpen) return;
 
     const fetchSupabaseData = async () => {
-      // Carrega dados offline salvos anteriormente nesta sessão local
-      const localBkgs = getSimulatedData<Booking>('bookings');
-      const localTkts = getSimulatedData<Ticket>('tickets');
-      
-      if (localBkgs.length > 0) {
-        setBookings(prev => {
-          const combined = [...localBkgs, ...prev];
-          return combined.filter((val, index, self) => self.findIndex(t => t.id === val.id) === index);
-        });
+      if (!isSupabaseConfigured || !supabase) {
+        setBookings([]);
+        setOcorrencias([]);
+        setBoletos([]);
+        setAssemblies([]);
+        setCondos([]);
+        setVisitantes([]);
+        setEncomendas([]);
+        setAuditLogs([]);
+        return;
       }
-      if (localTkts.length > 0) {
-        setOcorrencias(prev => {
-          const combined = [...localTkts, ...prev];
-          return combined.filter((val, index, self) => self.findIndex(t => t.id === val.id) === index);
-        });
-      }
-
-      if (!isSupabaseConfigured || !supabase) return;
 
       try {
         // Authenticate automatically if there is an active session on mount
@@ -467,38 +351,102 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
           setIsLoggedIn(true);
         }
 
+        // 1. Fetch Bookings
         const { data: dbBkgs, error: errBkgs } = await supabase.from('bookings').select('*');
         if (dbBkgs && !errBkgs) {
-          const mappedBkgs: Booking[] = dbBkgs.map(b => ({
+          setBookings(dbBkgs.map(b => ({
             id: b.id,
             area: b.area,
             data: b.data,
             periodo: b.periodo as any,
             status: b.status as any
-          }));
-          setBookings(prev => {
-            const combined = [...mappedBkgs, ...prev];
-            return combined.filter((val, index, self) => self.findIndex(t => t.id === val.id) === index);
-          });
+          })));
+        } else {
+          setBookings([]);
         }
 
+        // 2. Fetch Tickets/Ocorrencias
         const { data: dbTkts, error: errTkts } = await supabase.from('tickets').select('*');
         if (dbTkts && !errTkts) {
-          const mappedTkts: Ticket[] = dbTkts.map(t => ({
+          setOcorrencias(dbTkts.map(t => ({
             id: t.id,
             categoria: t.categoria as any,
             titulo: t.titulo,
             descricao: t.descricao || '',
             dataCriacao: t.data_criacao,
             status: t.status as any
-          }));
-          setOcorrencias(prev => {
-            const combined = [...mappedTkts, ...prev];
-            return combined.filter((val, index, self) => self.findIndex(t => t.id === val.id) === index);
-          });
+          })));
+        } else {
+          setOcorrencias([]);
+        }
+
+        // 3. Fetch Boletos
+        const { data: dbBoletos, error: errBoletos } = await supabase.from('boletos').select('*');
+        if (dbBoletos && !errBoletos) {
+          setBoletos(dbBoletos.map(b => ({
+            id: b.id,
+            referencia: b.referencia,
+            vencimento: b.vencimento,
+            valor: Number(b.valor || 0),
+            status: b.status as any,
+            codigoBarras: b.codigo_barras || ''
+          })));
+        } else {
+          setBoletos([]);
+        }
+
+        // 4. Fetch Assemblies
+        const { data: dbAssemblies, error: errAssemblies } = await supabase.from('assemblies').select('*');
+        if (dbAssemblies && !errAssemblies) {
+          setAssemblies(dbAssemblies.map(a => ({
+            id: a.id,
+            titulo: a.titulo,
+            data: a.data,
+            hora: a.hora,
+            pauta: a.pauta,
+            votacaoAtiva: a.votacao_ativa ?? true,
+            perguntaVotacao: a.pergunta_votacao,
+            votosFavor: Number(a.votos_favor || 0),
+            votosContra: Number(a.votos_contra || 0),
+            votoUsuario: a.voto_usuario
+          })));
+        } else {
+          setAssemblies([]);
+        }
+
+        // 5. Fetch Condos
+        const { data: dbCondos, error: errCondos } = await supabase.from('condominios').select('*');
+        if (dbCondos && !errCondos) {
+          setCondos(dbCondos);
+        } else {
+          setCondos([]);
+        }
+
+        // 6. Fetch Visitantes
+        const { data: dbVisitantes, error: errVisitantes } = await supabase.from('visitantes').select('*');
+        if (dbVisitantes && !errVisitantes) {
+          setVisitantes(dbVisitantes);
+        } else {
+          setVisitantes([]);
+        }
+
+        // 7. Fetch Encomendas
+        const { data: dbEncomendas, error: errEncomendas } = await supabase.from('encomendas').select('*');
+        if (dbEncomendas && !errEncomendas) {
+          setEncomendas(dbEncomendas);
+        } else {
+          setEncomendas([]);
+        }
+
+        // 8. Fetch AuditLogs
+        const { data: dbAudit, error: errAudit } = await supabase.from('auditoria').select('*');
+        if (dbAudit && !errAudit) {
+          setAuditLogs(dbAudit);
+        } else {
+          setAuditLogs([]);
         }
       } catch (err) {
-        console.warn('Falha ao conectar com tabelas do Supabase corporativo:', err);
+        console.warn('Falha ao conectar com tabelas do Supabase corporativo – modo offline:', err);
       }
     };
 
@@ -526,32 +474,15 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
 
   const handleCustomLogin = async (e: FormEvent) => {
     e.preventDefault();
-    if (!cpf || !password) {
+    if (!loginEmail || !password) {
       alert('Por favor, informe suas credenciais para entrar.');
       return;
     }
 
     setLoading(true);
     try {
-      let loginEmail = cpf;
-      // Se não possui @, assume CPF e pesquisa e-mail cadastrado correspondente na tabela de perfis
-      if (!loginEmail.includes('@')) {
-        const cleanCpfVal = cpf.replace(/\D/g, '');
-        const { data: profileRecord } = await supabase
-          .from('perfis')
-          .select('email')
-          .eq('cpf', cleanCpfVal)
-          .maybeSingle();
-
-        if (profileRecord && profileRecord.email) {
-          loginEmail = profileRecord.email;
-        } else {
-          loginEmail = `${cleanCpfVal || 'unknown'}@facilities.com.br`;
-        }
-      }
-
       console.log('Autenticando via Supabase Auth (signInWithPassword):', loginEmail);
-      const data = await router.login(loginEmail, password);
+      const data = await router.login(loginEmail.trim(), password);
       
       if (data && data.user) {
         // Encontrar profile para carregar dados na sessão
@@ -648,7 +579,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
       }
     }
     setIsLoggedIn(false);
-    setCpf('');
+    setLoginEmail('');
     setPassword('');
   };
 
@@ -924,14 +855,14 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                   <h5 className="font-bold text-center text-xs font-display uppercase tracking-wider text-[#101c29]">Acesso Certificado</h5>
                   
                   <div className="space-y-1">
-                    <label htmlFor="portal-cpf-input" className="text-[10px] font-bold text-[#101c29] uppercase block">CPF do Beneficiário</label>
+                    <label htmlFor="portal-email-input" className="text-[10px] font-bold text-[#101c29] uppercase block">E-mail de Acesso</label>
                     <input
-                      id="portal-cpf-input"
-                      type="text"
+                      id="portal-email-input"
+                      type="email"
                       required
-                      value={cpf}
-                      onChange={(e) => setCpf(e.target.value)}
-                      placeholder="000.000.000-00"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="seuemail@exemplo.com"
                       className="w-full bg-[#f8f9ff] border border-gray-250 outline-none focus:border-primary p-3 rounded-lg text-sm text-[#101c29]"
                     />
                   </div>

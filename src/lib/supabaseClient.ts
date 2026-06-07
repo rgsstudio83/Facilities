@@ -141,6 +141,108 @@ CREATE TABLE IF NOT EXISTS perfis (
   data_cadastro TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- Caso a tabela perfis já exista de criações passadas, garanta que suas colunas adicionais existam:
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS cpf TEXT;
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS unidade TEXT;
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS perfil TEXT;
+
+-- 6. Tabela de Condomínios
+CREATE TABLE IF NOT EXISTS condominios (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  cnpj TEXT,
+  endereco TEXT,
+  cidade TEXT,
+  estado TEXT,
+  sindico TEXT,
+  unidades INTEGER,
+  moradores INTEGER DEFAULT 0,
+  proprietarios INTEGER DEFAULT 0,
+  receita NUMERIC DEFAULT 0,
+  despesa NUMERIC DEFAULT 0,
+  inadimplencia_percent NUMERIC DEFAULT 0,
+  status TEXT DEFAULT 'Normal',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 7. Tabela de Moradores
+CREATE TABLE IF NOT EXISTS moradores (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  cpf TEXT,
+  unidade TEXT,
+  condominio_id TEXT,
+  proprietario BOOLEAN DEFAULT true,
+  telefone TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 8. Tabela de Visitantes
+CREATE TABLE IF NOT EXISTS visitantes (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  rg TEXT,
+  unidade TEXT,
+  condominio_id TEXT,
+  data_entrada TEXT,
+  status TEXT DEFAULT 'Liberado',
+  data_saida TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 9. Tabela de Encomendas
+CREATE TABLE IF NOT EXISTS encomendas (
+  id TEXT PRIMARY KEY,
+  destinatario TEXT NOT NULL,
+  unidade TEXT,
+  condominio_id TEXT,
+  descricao TEXT,
+  transportadora TEXT,
+  data_registro TEXT,
+  status TEXT DEFAULT 'Aguardando',
+  data_retirada TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 10. Tabela de Auditoria (Logs)
+CREATE TABLE IF NOT EXISTS auditoria (
+  id TEXT PRIMARY KEY,
+  data TEXT NOT NULL,
+  hora TEXT NOT NULL,
+  quem TEXT NOT NULL,
+  perfil TEXT NOT NULL,
+  acao TEXT NOT NULL,
+  entidade TEXT NOT NULL,
+  detalhes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 11. Tabela de Boletos Bancários
+CREATE TABLE IF NOT EXISTS boletos (
+  id TEXT PRIMARY KEY,
+  referencia TEXT NOT NULL,
+  vencimento TEXT NOT NULL,
+  valor NUMERIC NOT NULL,
+  status TEXT DEFAULT 'Pendente',
+  codigo_barras TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 12. Tabela de Assembleias
+CREATE TABLE IF NOT EXISTS assemblies (
+  id TEXT PRIMARY KEY,
+  titulo TEXT NOT NULL,
+  data TEXT NOT NULL,
+  hora TEXT NOT NULL,
+  pauta TEXT NOT NULL,
+  votacao_ativa BOOLEAN DEFAULT true,
+  pergunta_votacao TEXT,
+  votos_favor INTEGER DEFAULT 0,
+  votos_contra INTEGER DEFAULT 0,
+  voto_usuario TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- Habilitar acesso público de escrita nas tabelas para habilitar leads via formulários do site
 ALTER TABLE contact_messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir inserções públicas" ON contact_messages FOR INSERT WITH CHECK (true);
@@ -156,6 +258,58 @@ CREATE POLICY "Permitir tudo para simulação" ON bookings FOR ALL USING (true);
 ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir tudo para simulação" ON tickets FOR ALL USING (true);
 
+ALTER TABLE condominios ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir tudo para simulação de condominios" ON condominios FOR ALL USING (true);
+
+ALTER TABLE moradores ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir tudo para simulação de moradores" ON moradores FOR ALL USING (true);
+
+ALTER TABLE visitantes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir tudo para simulação de visitantes" ON visitantes FOR ALL USING (true);
+
+ALTER TABLE encomendas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir tudo para simulação de encomendas" ON encomendas FOR ALL USING (true);
+
+ALTER TABLE auditoria ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir tudo para simulação de auditoria" ON auditoria FOR ALL USING (true);
+
+ALTER TABLE boletos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir tudo para simulação de boletos" ON boletos FOR ALL USING (true);
+
+ALTER TABLE assemblies ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir tudo para simulação de assemblies" ON assemblies FOR ALL USING (true);
+
 ALTER TABLE perfis ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir leitura de perfis" ON perfis FOR SELECT USING (true);
+CREATE POLICY "Permitir inserções públicas de perfis" ON perfis FOR INSERT WITH CHECK (true);
+CREATE POLICY "Permitir atualização do próprio perfil" ON perfis FOR UPDATE USING (auth.uid() = auth_user_id);
 CREATE POLICY "Permitir tudo para simulação de perfis" ON perfis FOR ALL USING (true);
+
+-- 6. Trigger automático de Sincronização de Cadastro pós-Auth
+-- Execute este bloco para garantir que, caso o e-mail exija confirmação,
+-- o perfil correspondente seja injetado direto no banco pelo servidor Postgres.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.perfis (id, auth_user_id, nome, cpf, email, unidade, tipo, perfil)
+  VALUES (
+    new.id,
+    new.id,
+    coalesce(new.raw_user_meta_data->>'full_name', 'Usuário'),
+    coalesce(new.raw_user_meta_data->>'cpf', ''),
+    new.email,
+    coalesce(new.raw_user_meta_data->>'unit', 'Apto Geral'),
+    coalesce(lower(replace(replace(replace(new.raw_user_meta_data->>'profile', 'síndico', 'sindico'), 'subsíndico', 'subsindico'), 'proprietário', 'proprietario')), 'morador'),
+    coalesce(new.raw_user_meta_data->>'profile', 'Morador')
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Registra o trigger
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 `;
