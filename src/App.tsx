@@ -117,6 +117,24 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  // Redirect logged-in users away from the home landing page
+  useEffect(() => {
+    if (!router.sessionLoading && router.isLoggedIn && (currentPath === 'home' || currentPath === '' || !currentPath)) {
+      const profileRole = router.profile?.tipo || 'morador';
+      const normalizedRole = profileRole.toLowerCase()
+        .replace('síndico', 'sindico')
+        .replace('subsíndico', 'subsindico')
+        .replace('proprietário', 'proprietario')
+        .replace('conselheiro', 'conselheiro')
+        .replace('porteiro', 'porteiro')
+        .replace('administrador', 'admin')
+        .replace('colaborador', 'colaborador')
+        .trim();
+      
+      window.location.hash = `#dashboard/${normalizedRole}`;
+    }
+  }, [router.isLoggedIn, router.sessionLoading, currentPath, router.profile]);
+
   const handleNavigate = (type: 'home' | 'servico' | 'local' | 'blog' | 'faq', slug?: string) => {
     let newHash = '#home';
     if (type === 'servico' && slug) {
@@ -265,7 +283,7 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
       <main className={viewType === 'dashboard' ? '' : 'mt-20'}>
         
         {/* HOMEPAGE VIEW */}
-        {viewType === 'home' && (
+        {viewType === 'home' && !router.isLoggedIn && (
           <div className="animate-fade-in">
             {/* HERO SECTION */}
             <section id="home" className="relative min-h-[85vh] md:min-h-[80vh] flex items-center bg-white overflow-hidden py-10 md:py-0">
