@@ -74,10 +74,10 @@ export default function Header({ onOpenPortal, onOpenQuote, onNavigate, currentV
   return (
     <header
       id="main-header"
-      className={`fixed top-0 left-0 w-full z-4xl transition-all duration-300 h-20 px-4 md:px-12 flex justify-between items-center ${
+      className={`fixed top-0 left-0 w-full z-4xl transition-all duration-300 h-20 px-4 md:px-12 flex justify-between items-center border-b ${
         isScrolled || currentViewType !== 'home'
-          ? 'glass-header bg-white/95 backdrop-blur shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border-b border-border-light'
-          : 'bg-white'
+          ? 'glass-header bg-white/95 backdrop-blur shadow-[0px_4px_20px_rgba(0,0,0,0.08)] border-border-light'
+          : 'bg-white shadow-[0px_2px_10px_rgba(0,0,0,0.04)] border-gray-100'
       }`}
     >
       {/* Logo */}
