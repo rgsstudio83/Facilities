@@ -605,12 +605,19 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
       );
 
       // Reset form variables
+      const finalName = regName.trim();
+      const finalProfile = profileType;
+      const finalUnit = regUnit.trim();
+
       setRegName('');
       setRegCpf('');
       setRegEmail('');
       setRegPassword('');
       setRegUnit('Apto Geral');
       
+      if (onLoginSuccess) {
+        onLoginSuccess(finalName, finalProfile, finalUnit);
+      }
       onClose();
     } catch (err: any) {
       const isFetchErr = err.message?.toLowerCase().includes('failed to fetch') || 

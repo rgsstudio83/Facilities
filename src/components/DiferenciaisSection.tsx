@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Shield, Sparkles, UserCheck, Cpu, Heart, Check, Clock, Globe, Award, HelpCircle } from 'lucide-react';
 
 interface Differential {
@@ -176,10 +177,10 @@ export default function DiferenciaisSection() {
         </div>
 
         {/* Floating details banner on selection */}
-        {activeDiff && (
+        {activeDiff && createPortal(
           <div
             id="diff-modal-container"
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in"
+            className="fixed inset-0 bg-black/25 backdrop-blur-[2px] flex items-center justify-center p-4 z-50 animate-fade-in"
             onClick={() => setActiveDiff(null)}
           >
             <div
@@ -248,7 +249,8 @@ export default function DiferenciaisSection() {
                 </div>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </section>

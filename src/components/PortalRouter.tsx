@@ -461,10 +461,15 @@ export function PortalRouterProvider({
     setSessionLoading(true);
     
     if (!isSupabaseConfigured) {
-      const errorMsg = 'Configuração do Supabase pendente. Para realizar o cadastro real no seu banco de dados, adicione as chaves VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nas Configurações (Secrets) do painel lateral do AI Studio.';
-      triggerNotification('Configuração Pendente', errorMsg);
-      setSessionLoading(false);
-      throw new Error(errorMsg);
+      console.warn('Supabase not configured, signing up in Simulated sandbox mode...');
+      try {
+        const result = await signUpSimulated(email, pass, name, unit, role, cpf);
+        setSessionLoading(false);
+        return result;
+      } catch (simErr: any) {
+        setSessionLoading(false);
+        throw simErr;
+      }
     }
 
     try {

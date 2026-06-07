@@ -69,7 +69,8 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
 
   const handlePortalClose = () => {
     setIsPortalOpen(false);
-    if (['login', 'register', 'esqueci-senha', 'alterar-senha'].includes(router.currentRoute.replace('#', ''))) {
+    // Prevent resetting the hash to #home if the user is already logged in/registered
+    if (!router.isLoggedIn && ['login', 'register', 'esqueci-senha', 'alterar-senha'].includes(router.currentRoute.replace('#', ''))) {
       window.location.hash = '#home';
     }
   };
@@ -78,7 +79,19 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
     setAuthenticatedProfile(profile);
     setCurrentUser({ name: username, profile, unit });
     setIsPortalOpen(false);
-    window.location.hash = '#dashboard';
+    
+    // Normalize role to redirect to the exact profile dashboard route
+    const normalizedRole = (profile || 'morador').toLowerCase()
+      .replace('síndico', 'sindico')
+      .replace('subsíndico', 'subsindico')
+      .replace('proprietário', 'proprietario')
+      .replace('conselheiro', 'conselheiro')
+      .replace('porteiro', 'porteiro')
+      .replace('administrador', 'admin')
+      .replace('colaborador', 'colaborador')
+      .trim();
+      
+    window.location.hash = `#dashboard/${normalizedRole}`;
   };
 
   const handleLogout = () => {
