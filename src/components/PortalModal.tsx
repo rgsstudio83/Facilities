@@ -56,6 +56,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   // Registration & profile states
   const [formTab, setFormTab] = useState<'login' | 'register' | 'esqueci-senha' | 'alterar-senha'>('login');
   const [profileType, setProfileType] = useState<string>('Morador');
+  const [quickRole, setQuickRole] = useState<string>('Morador');
   const [regName, setRegName] = useState('');
   const [regCpf, setRegCpf] = useState('');
   const [regEmail, setRegEmail] = useState('');
@@ -454,16 +455,52 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   }, [isOpen]);
 
   // Handle simulated Quick Login
-  const handleDemoLogin = (role: 'morador' | 'sindico') => {
-    const dName = role === 'sindico' ? 'Cristhiane Xavier' : 'Roberto Silva';
-    const dUnit = role === 'sindico' ? 'Síndico Profissional' : 'Apto 41-B';
-    const dProfile = role === 'sindico' ? 'Síndico' : 'Morador';
+  const handleDemoLogin = (role: string) => {
+    let dName = 'Roberto Silva';
+    let dUnit = 'Apto 41-B';
+    let dProfile = 'Morador';
+
+    const cleanRole = role.toLowerCase()
+      .replace('síndico', 'sindico')
+      .replace('subsíndico', 'subsindico')
+      .replace('proprietário', 'proprietario')
+      .trim();
+
+    if (cleanRole === 'sindico' || cleanRole === 'síndico') {
+      dName = 'Cristhiane Xavier';
+      dUnit = 'Síndico Geral';
+      dProfile = 'Síndico';
+    } else if (cleanRole === 'subsindico' || cleanRole === 'subsíndico') {
+      dName = 'Gustavo Mendes';
+      dUnit = 'Subsíndico Setorial';
+      dProfile = 'Subsíndico';
+    } else if (cleanRole === 'administrador' || cleanRole === 'admin') {
+      dName = 'Administrador Facilities';
+      dUnit = 'Hub Corporativo';
+      dProfile = 'Administrador';
+    } else if (cleanRole === 'conselheiro') {
+      dName = 'Felipe Noronha';
+      dUnit = 'Apto 102';
+      dProfile = 'Conselheiro';
+    } else if (cleanRole === 'porteiro') {
+      dName = 'Jorge Alencar';
+      dUnit = 'Portaria Principal';
+      dProfile = 'Porteiro';
+    } else if (cleanRole === 'colaborador' || cleanRole === 'colab') {
+      dName = 'Silvia Rodrigues';
+      dUnit = 'Suporte Técnico';
+      dProfile = 'Colaborador';
+    } else if (cleanRole === 'proprietario' || cleanRole === 'proprietário') {
+      dName = 'Mariana Couto';
+      dUnit = 'Apto 204';
+      dProfile = 'Proprietário';
+    }
 
     setUsername(dName);
     setApartmentCode(dUnit);
     setProfileType(dProfile);
 
-    onShowNotification('Login efetuado!', 'Bem-vindo ao painel demonstrativo Facilities.');
+    onShowNotification('Login efetuado!', `Bem-vindo ao painel demonstrativo Facilities como ${dProfile}.`);
 
     if (onLoginSuccess) {
       onLoginSuccess(dName, dProfile, dUnit);
@@ -790,22 +827,32 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                 Emita 2ª via de boleto, reserve áreas de lazer, registre ocorrências na gestão e consulte contas online em segundos.
               </p>
               
-              <div className="bg-white/60 p-4 rounded-xl border border-[#cfdbec] space-y-3">
+              <div className="bg-white/65 p-4 rounded-xl border border-[#cfdbec] space-y-3">
                 <p className="text-[10px] uppercase font-bold text-gray-500">Testar Demonstrativo Grátis</p>
-                <div className="flex flex-col gap-2">
-                  <button
-                    id="login-quick-morador"
-                    onClick={() => handleDemoLogin('morador')}
-                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-2 text-xs font-bold rounded-lg transition-transform active:scale-95"
+                <div className="space-y-2 text-left">
+                  <label htmlFor="quick-role-select" className="text-[9px] font-bold text-secondary uppercase block">Selecione o Papel</label>
+                  <select
+                    id="quick-role-select"
+                    value={quickRole}
+                    onChange={(e) => setQuickRole(e.target.value)}
+                    className="w-full bg-white border border-gray-200 outline-none focus:border-primary p-2 rounded text-xs text-[#101c29] font-semibold cursor-pointer"
                   >
-                    Entrar como Morador (Exemplo)
-                  </button>
+                    <option value="Morador">Morador (Residente)</option>
+                    <option value="Proprietário">Proprietário (Donatário)</option>
+                    <option value="Síndico">Síndico (Gestão Geral)</option>
+                    <option value="Subsíndico">Subsíndico (Gestão Setorial)</option>
+                    <option value="Conselheiro">Conselheiro (Conselho Fiscal)</option>
+                    <option value="Porteiro">Porteiro (Controle de Acesso)</option>
+                    <option value="Administrador">Administrador (Facilities Adm)</option>
+                    <option value="Colaborador">Colaborador (Prestador Interno)</option>
+                  </select>
+                  
                   <button
-                    id="login-quick-sindico"
-                    onClick={() => handleDemoLogin('sindico')}
-                    className="w-full bg-[#101c29] hover:bg-slate-800 text-white py-2 text-xs font-bold rounded-lg transition-transform active:scale-95"
+                    id="login-quick-selected"
+                    onClick={() => handleDemoLogin(quickRole)}
+                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-2.5 text-xs font-bold rounded-lg transition-transform active:scale-95 flex items-center justify-center gap-1.5"
                   >
-                    Entrar como Síndico (Exemplo)
+                    Acessar Demonstrativo
                   </button>
                 </div>
               </div>

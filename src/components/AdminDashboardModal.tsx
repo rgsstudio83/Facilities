@@ -34,7 +34,8 @@ import {
   Activity,
   Key,
   ShieldCheck,
-  Check
+  Check,
+  Bell
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
@@ -43,11 +44,22 @@ interface AdminDashboardModalProps {
   onClose: () => void;
   onShowMessage: (title: string, desc: string) => void;
   initialProfile?: string;
-  currentUser?: { name: string; profile: string; unit: string } | null;
+  currentUser?: { name: string; profile: string; unit: string; email?: string } | null;
   onLogout?: () => void;
 }
 
 // Data Interfaces
+interface UserProfile {
+  id: string;
+  auth_user_id?: string;
+  nome: string;
+  email: string;
+  cpf?: string;
+  unidade?: string;
+  tipo: string;
+  perfil?: string;
+}
+
 interface Condominio {
   id: string;
   nome: string;
@@ -122,6 +134,7 @@ export default function AdminDashboardModal({
   const [activeSubPage, setActiveSubPage] = useState<string>('dashboard');
   const [selectedCondoId, setSelectedCondoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isRlsAlertDismissed, setIsRlsAlertDismissed] = useState(false);
 
   // Sync initial authenticated profile when modal opens
   useEffect(() => {
@@ -151,6 +164,7 @@ export default function AdminDashboardModal({
   // Simulated Database states - Initialized to empty to avoid showing fictitious data, only showing Supabase records
   const [condos, setCondos] = useState<Condominio[]>([]);
   const [moradoresList, setMoradoresList] = useState<MoradorUnit[]>([]);
+  const [profilesList, setProfilesList] = useState<UserProfile[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditoriaLog[]>([]);
   const [visitantes, setVisitantes] = useState<Visitante[]>([]);
   const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
@@ -165,6 +179,13 @@ export default function AdminDashboardModal({
   const [newMoradorCpf, setNewMoradorCpf] = useState('');
   const [newMoradorUnidade, setNewMoradorUnidade] = useState('');
   const [newMoradorCondoId, setNewMoradorCondoId] = useState('cd-1');
+
+  const [newProfileNome, setNewProfileNome] = useState('');
+  const [newProfileEmail, setNewProfileEmail] = useState('');
+  const [newProfileCpf, setNewProfileCpf] = useState('');
+  const [newProfileUnidade, setNewProfileUnidade] = useState('');
+  const [newProfileTipo, setNewProfileTipo] = useState('morador');
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
 
   const [newVisitorNome, setNewVisitorNome] = useState('');
   const [newVisitorRg, setNewVisitorRg] = useState('');
@@ -197,6 +218,22 @@ export default function AdminDashboardModal({
         setAuditLogs([]);
         setVisitantes([]);
         setEncomendas([]);
+        
+        // Carrega perfis simulados para garantir funcionamento offline/demonstrativo
+        const localData = localStorage.getItem('supabase_sim_perfis');
+        if (localData) {
+          setProfilesList(JSON.parse(localData));
+        } else {
+          const defaultSimPerfis: UserProfile[] = [
+            { id: 'p-1', nome: 'Cristhiane Xavier', email: 'contato@facilities.com.br', cpf: '111.111.111-11', unidade: 'Administração', tipo: 'administrador', perfil: 'Administrador' },
+            { id: 'p-2', nome: 'Roberto Silva', email: 'roberto@facilities.com.br', cpf: '222.222.222-22', unidade: 'Apto 41-B', tipo: 'morador', perfil: 'Morador' },
+            { id: 'p-3', nome: 'Gustavo Mendes', email: 'gustavo@facilities.com.br', cpf: '333.333.333-33', unidade: 'Apto 102', tipo: 'subsindico', perfil: 'Subsíndico' },
+            { id: 'p-4', nome: 'Jorge Alencar', email: 'jorge@facilities.com.br', cpf: '444.444.444-44', unidade: 'Portaria Principal', tipo: 'porteiro', perfil: 'Porteiro' },
+            { id: 'p-5', nome: 'Mariana Couto', email: 'mariana@facilities.com.br', cpf: '555.555.555-55', unidade: 'Apto 204', tipo: 'proprietario', perfil: 'Proprietário' }
+          ];
+          localStorage.setItem('supabase_sim_perfis', JSON.stringify(defaultSimPerfis));
+          setProfilesList(defaultSimPerfis);
+        }
         return;
       }
 
@@ -292,6 +329,36 @@ export default function AdminDashboardModal({
         } else {
           setAuditLogs([]);
         }
+
+        // Fetch Perfis/Roles
+        const { data: dbPerfis, error: errPerfis } = await supabase.from('perfis').select('*');
+        if (dbPerfis && !errPerfis) {
+          setProfilesList(dbPerfis.map((p: any) => ({
+            id: p.id,
+            auth_user_id: p.auth_user_id || p.id,
+            nome: p.nome,
+            email: p.email,
+            cpf: p.cpf || '',
+            unidade: p.unidade || '',
+            tipo: p.tipo || 'morador',
+            perfil: p.perfil || 'Morador'
+          })));
+        } else {
+          const localData = localStorage.getItem('supabase_sim_perfis');
+          if (localData) {
+            setProfilesList(JSON.parse(localData));
+          } else {
+            const defaultSimPerfis: UserProfile[] = [
+              { id: 'p-1', nome: 'Cristhiane Xavier', email: 'contato@facilities.com.br', cpf: '111.111.111-11', unidade: 'Administração', tipo: 'administrador', perfil: 'Administrador' },
+              { id: 'p-2', nome: 'Roberto Silva', email: 'roberto@facilities.com.br', cpf: '222.222.222-22', unidade: 'Apto 41-B', tipo: 'morador', perfil: 'Morador' },
+              { id: 'p-3', nome: 'Gustavo Mendes', email: 'gustavo@facilities.com.br', cpf: '333.333.333-33', unidade: 'Apto 102', tipo: 'subsindico', perfil: 'Subsíndico' },
+              { id: 'p-4', nome: 'Jorge Alencar', email: 'jorge@facilities.com.br', cpf: '444.444.444-44', unidade: 'Portaria Principal', tipo: 'porteiro', perfil: 'Porteiro' },
+              { id: 'p-5', nome: 'Mariana Couto', email: 'mariana@facilities.com.br', cpf: '555.555.555-55', unidade: 'Apto 204', tipo: 'proprietario', perfil: 'Proprietário' }
+            ];
+            localStorage.setItem('supabase_sim_perfis', JSON.stringify(defaultSimPerfis));
+            setProfilesList(defaultSimPerfis);
+          }
+        }
       } catch (err) {
         console.warn('Erro ao ler tabelas administrativas no Supabase:', err);
       } finally {
@@ -335,16 +402,8 @@ export default function AdminDashboardModal({
 
   // Automated menu navigation changer when active profile changes
   useEffect(() => {
-    // When changing role, swap to default menu of that specific role
-    if (activeProfile === 'porteiro') {
-      setActiveSubPage('portaria');
-    } else if (activeProfile === 'conselheiro') {
-      setActiveSubPage('financeiro');
-    } else if (activeProfile === 'morador' || activeProfile === 'proprietario') {
-      setActiveSubPage('minha_unidade');
-    } else {
-      setActiveSubPage('dashboard');
-    }
+    // Land every profile on the beautiful unified Dashboard view to examine dynamic RLS metrics and theme consistency
+    setActiveSubPage('dashboard');
     setSelectedCondoId(null);
   }, [activeProfile]);
 
@@ -482,6 +541,133 @@ export default function AdminDashboardModal({
     }
 
     onShowMessage("Sucesso", "Morador removido da base.");
+  };
+
+  const handleCreateOrUpdateProfile = async (e: FormEvent) => {
+    e.preventDefault();
+    if (activeProfile !== 'admin') {
+      onShowMessage("Bloqueio de Permissão", "Apenas o perfil Administrador pode adicionar ou editar perfis e roles.");
+      return;
+    }
+    if (!newProfileNome.trim() || !newProfileEmail.trim()) {
+      onShowMessage("Erro", "Nome e Email são campos obrigatórios.");
+      return;
+    }
+
+    const isEdit = !!selectedProfileId;
+    const targetId = selectedProfileId || `p-${Date.now()}`;
+
+    // Determina o perfil legível correspondente ao tipo de role
+    let resolvedPerfil = 'Morador';
+    const cleanTipo = newProfileTipo.toLowerCase();
+    if (cleanTipo === 'administrador' || cleanTipo === 'admin') resolvedPerfil = 'Administrador';
+    else if (cleanTipo === 'colaborador' || cleanTipo === 'colab') resolvedPerfil = 'Colaborador';
+    else if (cleanTipo === 'sindico' || cleanTipo === 'síndico') resolvedPerfil = 'Síndico';
+    else if (cleanTipo === 'subsindico' || cleanTipo === 'subsíndico') resolvedPerfil = 'Subsíndico';
+    else if (cleanTipo === 'conselheiro') resolvedPerfil = 'Conselheiro';
+    else if (cleanTipo === 'proprietario' || cleanTipo === 'proprietário') resolvedPerfil = 'Proprietário';
+    else if (cleanTipo === 'porteiro') resolvedPerfil = 'Porteiro';
+
+    const cleanCpf = newProfileCpf.replace(/\D/g, '');
+    const formattedCpf = cleanCpf.length === 11 
+      ? cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+      : newProfileCpf;
+
+    const profileData: UserProfile = {
+      id: targetId,
+      auth_user_id: targetId,
+      nome: newProfileNome,
+      email: newProfileEmail,
+      cpf: formattedCpf,
+      unidade: newProfileUnidade || 'Apto Geral',
+      tipo: cleanTipo,
+      perfil: resolvedPerfil
+    };
+
+    if (isEdit) {
+      setProfilesList(prev => prev.map(p => p.id === targetId ? profileData : p));
+      addAuditLog('EDITAR', 'perfis', `Atualizado perfil do usuário: ${newProfileNome} para role ${resolvedPerfil}`);
+    } else {
+      setProfilesList(prev => [profileData, ...prev]);
+      addAuditLog('CRIAR', 'perfis', `Criado novo perfil de usuário: ${newProfileNome} com role ${resolvedPerfil}`);
+    }
+
+    // Persiste no Supabase se houver conexão
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const payload = {
+          id: targetId,
+          auth_user_id: targetId,
+          nome: newProfileNome,
+          email: newProfileEmail,
+          cpf: formattedCpf,
+          unidade: newProfileUnidade || 'Apto Geral',
+          tipo: cleanTipo,
+          perfil: resolvedPerfil
+        };
+        await supabase.from('perfis').upsert(payload);
+        await supabase.from('perfil').upsert({
+          id: targetId,
+          nome: newProfileNome,
+          email: newProfileEmail,
+          cpf: formattedCpf,
+          tipo: cleanTipo,
+          unidade: newProfileUnidade || 'Apto Geral'
+        });
+      } catch (err: any) {
+        console.error('Erro ao salvar perfil no Supabase:', err.message);
+      }
+    }
+
+    // Atualiza no localStorage também
+    const localData = localStorage.getItem('supabase_sim_perfis');
+    let localList: UserProfile[] = localData ? JSON.parse(localData) : [];
+    if (isEdit) {
+      localList = localList.map(p => p.id === targetId ? profileData : p);
+    } else {
+      localList = [profileData, ...localList];
+    }
+    localStorage.setItem('supabase_sim_perfis', JSON.stringify(localList));
+
+    onShowMessage("Sucesso", isEdit ? "Perfil atualizado com sucesso!" : "Perfil criado com sucesso!");
+    
+    // Limpa formulário
+    setNewProfileNome('');
+    setNewProfileEmail('');
+    setNewProfileCpf('');
+    setNewProfileUnidade('');
+    setNewProfileTipo('morador');
+    setSelectedProfileId(null);
+  };
+
+  const handleDeleteProfile = async (id: string, name: string) => {
+    if (activeProfile !== 'admin') {
+      onShowMessage("Bloqueio de Permissão", "Apenas o perfil Administrador pode excluir perfis.");
+      return;
+    }
+
+    setProfilesList(prev => prev.filter(p => p.id !== id));
+    addAuditLog('EXCLUIR', 'perfis', `Deletado perfil do usuário: ${name}`);
+
+    // Deleta do Supabase se houver conexão
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('perfis').delete().eq('id', id);
+        await supabase.from('perfil').delete().eq('id', id);
+      } catch (err: any) {
+        console.error('Erro ao excluir perfil no Supabase:', err.message);
+      }
+    }
+
+    // Exclui do localStorage
+    const localData = localStorage.getItem('supabase_sim_perfis');
+    if (localData) {
+      let localList: UserProfile[] = JSON.parse(localData);
+      localList = localList.filter(p => p.id !== id);
+      localStorage.setItem('supabase_sim_perfis', JSON.stringify(localList));
+    }
+
+    onShowMessage("Sucesso", "Perfil removido do sistema.");
   };
 
   const handleCreateVisitor = (e: FormEvent) => {
@@ -629,6 +815,37 @@ export default function AdminDashboardModal({
 
   const activeDetailedCondo = selectedCondoId ? condos.find(c => c.id === selectedCondoId) : null;
 
+  const getActiveUserDetails = () => {
+    if (currentUser) {
+      return {
+        nome: currentUser.name || "Cristhiane Xavier",
+        perfil: currentUser.profile?.toUpperCase() || "ADMINISTRADOR",
+        unidade: currentUser.unit || "Apto Geral",
+        email: currentUser.email || "cristhiane@facilities.com.br"
+      };
+    }
+    switch (activeProfile) {
+      case 'admin':
+        return { nome: 'Cristhiane Xavier', perfil: 'ADMINISTRADOR', unidade: 'Apto Geral', email: 'cristhiane@facilities.com.br' };
+      case 'colaborador':
+        return { nome: 'Clara Santos', perfil: 'COLABORADOR', unidade: 'Geral Admin', email: 'clara@facilities.com.br' };
+      case 'sindico':
+        return { nome: 'Gustavo Mendes', perfil: 'SÍNDICO', unidade: 'Apto 102', email: 'gustavo@facilities.com.br' };
+      case 'subsindico':
+        return { nome: 'Carlos Augusto', perfil: 'SUB-SÍNDICO', unidade: 'Apto 104', email: 'carlos@facilities.com.br' };
+      case 'conselheiro':
+        return { nome: 'Roberto Silva', perfil: 'CONSELHEIRO', unidade: 'Apto 41-B', email: 'roberto@facilities.com.br' };
+      case 'proprietario':
+        return { nome: 'Mariana Couto', perfil: 'PROPRIETÁRIO', unidade: 'Apto 204', email: 'mariana@facilities.com.br' };
+      case 'morador':
+        return { nome: 'Roberto Silva', perfil: 'MORADOR', unidade: 'Apto 41-B', email: 'roberto@facilities.com.br' };
+      case 'porteiro':
+        return { nome: 'Jorge Alencar', perfil: 'PORTEIRO', unidade: 'Ronda Portaria', email: 'jorge@facilities.com.br' };
+      default:
+        return { nome: 'Cristhiane Xavier', perfil: 'ADMINISTRADOR', unidade: 'Apto Geral', email: 'cristhiane@facilities.com.br' };
+    }
+  };
+
   // Global Consolidated Metrics (Reflect RLS context)
   const stats = {
     totalCondos: visibleCondos.length,
@@ -652,6 +869,7 @@ export default function AdminDashboardModal({
           { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'condominios', label: 'Condomínios', icon: <Building2 className="w-4 h-4" /> },
           { id: 'moradores', label: 'Moradores Base', icon: <Users className="w-4 h-4" /> },
+          { id: 'perfis', label: 'Gestão de Perfis (Roles)', icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> },
           { id: 'financeiro', label: 'Financeiro Geral', icon: <Wallet className="w-4 h-4" /> },
           { id: 'portaria', label: 'Portaria Hub', icon: <Key className="w-4 h-4" /> },
           { id: 'relatorios', label: 'Relatórios Master', icon: <FileText className="w-4 h-4" /> },
@@ -669,13 +887,14 @@ export default function AdminDashboardModal({
       case 'sindico':
       case 'subsindico':
         return [
-          { id: 'dashboard', label: 'Dashboard Vista Parque', icon: <Compass className="w-4 h-4" /> },
+          { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'financeiro', label: 'Prestação de Contas', icon: <Wallet className="w-4 h-4" /> },
           { id: 'moradores', label: 'Consultar Moradores', icon: <Users className="w-4 h-4" /> },
           { id: 'portaria', label: 'Controle Portaria', icon: <Key className="w-4 h-4" /> },
         ];
       case 'conselheiro':
         return [
+          { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'financeiro', label: 'Balanço (Acesso Leitura)', icon: <Wallet className="w-4 h-4" /> },
           { id: 'moradores', label: 'Lista Condôminos', icon: <Users className="w-4 h-4" /> },
           { id: 'portaria', label: 'Movimentação Visitantes', icon: <Key className="w-4 h-4" /> },
@@ -683,11 +902,13 @@ export default function AdminDashboardModal({
       case 'proprietario':
       case 'morador':
         return [
+          { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'minha_unidade', label: 'Minha Unidade (41-B)', icon: <Compass className="w-4 h-4" /> },
           { id: 'portaria', label: 'Minhas Encomendas', icon: <Package className="w-4 h-4" /> },
         ];
       case 'porteiro':
         return [
+          { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'portaria', label: 'Ronda & Portaria', icon: <Key className="w-4 h-4" /> },
           { id: 'moradores', label: 'Consulta Moradores', icon: <Users className="w-4 h-4" /> },
         ];
@@ -757,270 +978,617 @@ export default function AdminDashboardModal({
           </div>
         )}
 
-        {/* TOP GIGANTIC EXECUTIVE GLASS HEADER */}
-        <div className="bg-[#0f1b29] text-white p-5 px-6 border-b border-white/5 flex flex-wrap justify-between items-center gap-4 relative overflow-hidden shrink-0 select-none">
-          <div className="flex gap-4 items-center">
-            <div className="bg-primary/10 p-2.5 rounded-2xl text-primary border border-primary/20 flex items-center justify-center">
-              <Building2 className="w-6 h-6" />
-            </div>
-            
-            <div className="text-left">
-              <span className="text-[10px] bg-red-650 text-white font-extrabold uppercase px-2 py-0.5 rounded tracking-wide">
-                AMBIENTE INTEGRADO DE GERENCIAMENTO FACILITIES
-              </span>
-              <h2 className="text-xl md:text-2xl font-black mt-1 font-display flex items-center gap-2">
-                Facilities Condominial 
-                <span className="text-xs text-emerald-400 font-bold bg-[#14263b] px-3 py-1 rounded-full font-mono border border-white/5">
-                  🛡️ {activeProfile.toUpperCase()}
-                </span>
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex flex-col text-right font-mono text-[10px]">
-              <span className="text-[#3ecf8e] font-bold">CONNECTED DB SUPABASE</span>
-              <span className="text-gray-400">Tempo de Resposta Médio: 12ms</span>
-            </div>
-            <button
-              id="admin-close-top-btn"
-              onClick={() => {
-                if (onLogout) onLogout();
-                onClose();
-              }}
-              className="bg-white/10 hover:bg-white/20 p-2.5 rounded-xl border-0 cursor-pointer font-bold text-white transition-all hover:scale-105 active:scale-95"
-            >
-              &times; Sair
-            </button>
-          </div>
-        </div>
-
         {/* MAIN BODY CORE */}
-        <div id="admin-main-body" className="overflow-hidden grid grid-cols-1 md:grid-cols-[16rem_1fr] h-full w-full">
+        <div id="admin-main-body" className="overflow-hidden grid grid-cols-1 md:grid-cols-[280px_1fr] h-full w-full">
           
-          {/* LEFT DYNAMIC SIDEBAR MENU */}
-          <div className="w-full bg-[#0a111a] border-r border-white/5 p-4 flex flex-col overflow-y-auto md:overflow-y-visible">
-            <div className="mb-4 hidden md:block">
-              <p className="text-[10px] text-gray-500 uppercase font-black tracking-wider text-left pl-1">Menú Dinâmico do Perfil</p>
+          {/* LEFT DYNAMIC SIDEBAR MENU (Premium Dark Theme: #061426) */}
+          <div className="w-full bg-[#061426] border-r border-white/5 flex flex-col overflow-y-auto shrink-0 select-none">
+            
+            {/* Top Logo Area */}
+            <div className="p-6 pb-4 border-b border-white/5 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#10B981] to-[#059669] text-white flex items-center justify-center shadow-lg shadow-emerald-500/10">
+                <Building2 className="w-5.5 h-5.5" />
+              </div>
+              <div className="text-left font-sans">
+                <span className="text-white text-[15px] font-black tracking-tight block leading-tight">Facilities</span>
+                <span className="text-[#10B981] text-[10px] font-extrabold uppercase tracking-widest block mt-0.5">Condominial</span>
+              </div>
             </div>
 
-            <nav className="flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-x-visible shrink-0 pb-2 md:pb-0">
-              {getMenuItems().map(item => (
-                <button
-                  key={item.id}
-                  id={`side-menu-${item.id}`}
-                  onClick={() => {
-                    setActiveSubPage(item.id);
-                    setSelectedCondoId(null);
-                  }}
-                  className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold text-left cursor-pointer transition-all whitespace-nowrap ${
-                    activeSubPage === item.id 
-                      ? 'bg-[#af101a] text-white font-black' 
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  {item.icon}
-                  {item.label}
-                </button>
-              ))}
+            {/* Menu Header Category */}
+            <div className="px-6 py-2 pt-5 text-left">
+              <span className="text-[10px] text-[#94A3B8] font-bold uppercase tracking-wider">Menu Principal</span>
+            </div>
+
+            {/* Dynamic Interactive Navigation Items */}
+            <nav className="px-3 space-y-1">
+              {getMenuItems().map(item => {
+                const isActive = activeSubPage === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    id={`side-menu-${item.id}`}
+                    onClick={() => {
+                      setActiveSubPage(item.id);
+                      setSelectedCondoId(null);
+                    }}
+                    className={`w-full relative overflow-hidden flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold text-left transition-all duration-250 shrink-0 cursor-pointer ${
+                      isActive 
+                        ? 'bg-[#0E7C66] text-white ring-1 ring-emerald-500/20' 
+                        : 'text-[#94A3B8] hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {/* Active Accent Side Indicator */}
+                    {isActive && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#10B981] rounded-r-md"></div>
+                    )}
+                    <span className={`transition-transform duration-200 ${isActive ? 'scale-110 text-white' : 'text-[#94A3B8]'}`}>
+                      {item.icon}
+                    </span>
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                );
+              })}
             </nav>
 
-            {/* Profile Meta Cards */}
-            <div className="mt-auto pt-4 border-t border-white/5 text-left text-[11px] text-gray-400 hidden md:block select-none">
-              <p className="font-semibold text-white/95">Sessão Segura</p>
-              <p className="text-[10px] text-gray-500 mt-1">Superlógica + Supabase Auth</p>
-              <div className="bg-white/5 p-2.5 rounded-xl mt-2 border border-white/5 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Auditoria Ativa</span>
+            {/* Middle Category "Sessão Segura" */}
+            <div className="px-6 py-2 pt-6 text-left">
+              <span className="text-[10px] text-[#94A3B8] font-bold uppercase tracking-wider">Conexão Segura</span>
+            </div>
+            <div className="px-4 py-1 select-none text-left">
+              <div className="bg-[#0B1B2F] p-3 rounded-2xl border border-white/5 flex items-center gap-2.5">
+                <ShieldCheck className="w-5 h-5 text-[#10B981] shrink-0" />
+                <div className="text-left leading-none">
+                  <p className="text-white font-bold text-[10px] uppercase tracking-wider">Auditoria Ativa</p>
+                  <p className="text-[#10B981] text-[9px] font-semibold mt-0.5">Sessão Protegida</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* RIGHT PANELS WORKSPACE */}
-          <div className="min-w-0 bg-slate-50 overflow-y-auto p-4 md:p-8 h-full">
-            
-            {/* 1. VIEW DETAILED INDIVIDUAL CONDOMINIUM */}
-            {selectedCondoId && activeDetailedCondo ? (
-              <div className="space-y-6">
-                <button
-                  onClick={() => setSelectedCondoId(null)}
-                  className="flex items-center gap-1.5 text-xs font-bold text-[#af101a] hover:underline cursor-pointer border-0 bg-transparent text-left"
-                >
-                  <ArrowLeft className="w-4 h-4" /> Voltar ao Painel Geral
-                </button>
-
-                <div className="bg-white p-6 rounded-3xl border border-gray-150 shadow-sm text-left grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="md:col-span-2 space-y-3">
-                    <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full font-bold">INFO SENSÍVEL DE RLS</span>
-                    <h3 className="text-2xl font-black text-[#0f1b29] font-display">{activeDetailedCondo.nome}</h3>
-                    <p className="text-xs text-gray-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {activeDetailedCondo.endereco}, {activeDetailedCondo.cidade} ({activeDetailedCondo.estado})</p>
+            {/* Bottom Account Indicator & Logged Member */}
+            <div className="mt-auto p-4 border-t border-white/5 bg-[#05101F]">
+              <div className="bg-[#0B1B2F] p-3 rounded-2xl flex items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#10B981] to-[#0E7C66] text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-md">
+                    {getActiveUserDetails().nome.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()}
                   </div>
-
-                  <div className="bg-[#101c29] text-white p-4 rounded-2xl flex flex-col justify-between">
-                    <span className="text-[10px] text-gray-400 block tracking-wider uppercase font-bold">Faturamento Estimado</span>
-                    <h4 className="text-2xl font-black mt-2">R$ {activeDetailedCondo.receita.toLocaleString('pt-BR')}</h4>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
-                  <div className="bg-white p-5 rounded-2xl border border-gray-150 flex justify-between items-center">
-                    <div>
-                      <span className="text-[10px] text-gray-400 uppercase font-bold block">Despesa Mensal</span>
-                      <h4 className="text-xl font-bold text-[#af101a] mt-1">R$ {activeDetailedCondo.despesa.toLocaleString('pt-BR')}</h4>
-                    </div>
-                    <TrendingDown className="w-8 h-8 text-red-500 bg-red-50 p-1.5 rounded-lg" />
-                  </div>
-
-                  <div className="bg-white p-5 rounded-2xl border border-gray-150 flex justify-between items-center">
-                    <div>
-                      <span className="text-[10px] text-gray-400 uppercase font-bold block">Saldo Técnico</span>
-                      <h4 className="text-xl font-bold text-emerald-600 mt-1">R$ {(activeDetailedCondo.receita - activeDetailedCondo.despesa).toLocaleString('pt-BR')}</h4>
-                    </div>
-                    <TrendingUp className="w-8 h-8 text-emerald-500 bg-emerald-50 p-1.5 rounded-lg" />
-                  </div>
-
-                  <div className="bg-white p-5 rounded-2xl border border-gray-150 flex justify-between items-center">
-                    <div>
-                      <span className="text-[10px] text-gray-400 uppercase font-bold block">Inadimplência Real e Competente</span>
-                      <h4 className="text-xl font-bold text-amber-600 mt-1">{activeDetailedCondo.inadimplenciaPercent}%</h4>
-                    </div>
-                    <AlertCircle className="w-8 h-8 text-amber-500 bg-amber-50 p-1.5 rounded-lg" />
+                  <div className="text-left min-w-0">
+                    <p className="text-white font-extrabold text-xs truncate leading-tight">{getActiveUserDetails().nome}</p>
+                    <p className="text-[#10B981] text-[9px] font-black uppercase tracking-wider mt-0.5 leading-none">{getActiveUserDetails().perfil}</p>
                   </div>
                 </div>
               </div>
-            ) : (
-              <>
-                {/* 2. SUB-PAGE: DASHBOARD */}
-                {activeSubPage === 'dashboard' && (
-                  <div className="space-y-6">
-                    {/* Alerta de RLS Insight */}
-                    <div className="bg-red-50 border border-red-100 p-4 rounded-2xl text-xs text-red-900 text-left flex items-start gap-3">
-                      <ShieldAlert className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                      <div>
-                        <strong className="font-bold text-red-700">Atenção RLS Global:</strong> Parque das Amoreiras registra inadimplência de <strong>21.0%</strong>. Se logado sob os perfis Síndico/Conselheiro/Morador, as políticas de segurança ocultam outros empreendimentos para proteger o direito civil dos condôminos.
-                      </div>
+
+              {/* Collapsible Action buttons */}
+              <div className="mt-4 flex items-center justify-between px-2 text-[11px] text-[#94A3B8]">
+                <button 
+                  onClick={() => {
+                    if (onLogout) onLogout();
+                    onClose();
+                  }}
+                  className="flex items-center gap-1.5 hover:text-white transition-colors font-bold cursor-pointer bg-none border-0 bg-transparent pl-0 text-left"
+                >
+                  <X className="w-3.5 h-3.5 text-red-500" /> Sair da Conta
+                </button>
+                <span className="text-gray-700 select-none">|</span>
+                <span className="text-[10px] text-gray-500 font-mono select-none uppercase tracking-widest font-black">RLS: ATIVO</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* RIGHT PANELS WORKSPACE (Premium Light Content Theme: #F8FAFC) */}
+          <div className="min-w-0 bg-[#F8FAFC] flex flex-col h-full overflow-hidden">
+            
+            {/* White Premium Sticky Header (80px height: h-20) */}
+            <header className="h-20 bg-white border-b border-[#E2E8F0] px-6 md:px-8 flex items-center justify-between shrink-0 select-none select-none z-10 shadow-xs">
+              
+              {/* Left Column: Latency / Connection Pulse */}
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22C55E] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#22C55E]"></span>
+                </span>
+                <span className="text-xs text-[#64748B] font-medium hidden sm:inline-block">
+                  Sessão ativa sob ambiente monitorado de RLS do PostgreSQL
+                </span>
+              </div>
+
+              {/* Right Column: Database Connection badge, Alarm bell, avatar */}
+              <div className="flex items-center gap-4">
+                
+                {/* Connection Status badge */}
+                <div className="bg-white border border-[#E2E8F0] px-3.5 py-1.5 rounded-full flex items-center gap-2 shadow-xs shrink-0 select-none">
+                  <div className="h-5 w-5 rounded-full bg-emerald-50 border border-emerald-500/10 flex items-center justify-center text-emerald-500">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="text-left leading-none font-sans">
+                    <p className="text-[#10B981] font-black text-[9px] uppercase tracking-wider">Connected Supabase</p>
+                    <p className="text-[#64748B] font-mono text-[8.5px] mt-0.5 leading-none font-bold">Latency: 12ms</p>
+                  </div>
+                </div>
+
+                {/* Alarm Bell Button */}
+                <button className="relative p-2 rounded-xl text-[#64748B] hover:text-[#0F172A] hover:bg-slate-100 transition-colors shrink-0 cursor-pointer">
+                  <Bell className="w-5 h-5" />
+                  <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+                </button>
+
+                {/* User Initials Circle */}
+                <div 
+                  title={getActiveUserDetails().email}
+                  className="h-10 w-10 rounded-full bg-[#3B82F6] hover:bg-blue-600 font-sans font-bold text-white text-xs flex items-center justify-center cursor-help select-none shadow-xs tracking-wider border-2 border-white ring-2 ring-blue-500/10"
+                >
+                  {getActiveUserDetails().nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                </div>
+
+              </div>
+
+            </header>
+
+            {/* Workspace Inner Scroll Container */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
+
+              {/* 1. VIEW DETAILED INDIVIDUAL CONDOMINIUM */}
+              {selectedCondoId && activeDetailedCondo ? (
+                <div className="space-y-6">
+                  <button
+                    onClick={() => setSelectedCondoId(null)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-[#0E7C66] hover:underline cursor-pointer border-0 bg-transparent text-left"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Voltar ao Painel Geral
+                  </button>
+
+                  <div className="bg-white p-6 rounded-3xl border border-[#E2E8F0] shadow-sm text-left grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="md:col-span-2 space-y-3">
+                      <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full font-bold border border-emerald-500/10">INFO SENSÍVEL DE RLS</span>
+                      <h3 className="text-2xl font-black text-[#0F172A] font-display">{activeDetailedCondo.nome}</h3>
+                      <p className="text-xs text-[#64748B] flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {activeDetailedCondo.endereco}, {activeDetailedCondo.cidade} ({activeDetailedCondo.estado})</p>
                     </div>
 
-                    {/* Master KPI Boxes */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-left">
-                      <div className="bg-white p-4 rounded-2xl border border-gray-150 shadow-xs">
-                        <span className="text-[10px] text-gray-400 uppercase font-bold block">Condomínios</span>
-                        <h4 className="text-2xl font-black text-[#0f1b29] mt-1">{stats.totalCondos}</h4>
-                      </div>
-                      <div className="bg-white p-4 rounded-2xl border border-gray-150 shadow-xs">
-                        <span className="text-[10px] text-gray-400 uppercase font-bold block">Unidades Totais</span>
-                        <h4 className="text-2xl font-black text-[#0f1b29] mt-1">{stats.unidades}</h4>
-                      </div>
-                      <div className="bg-white p-4 rounded-2xl border border-gray-150 shadow-xs">
-                        <span className="text-[10px] text-gray-400 uppercase font-bold block">Moradores Ativos</span>
-                        <h4 className="text-2xl font-black text-[#0f1b29] mt-1">{stats.moradores}</h4>
-                      </div>
-                      <div className="bg-white p-4 rounded-2xl border border-gray-150 shadow-xs">
-                        <span className="text-[10px] text-gray-400 uppercase font-bold block">Inadimplência Média</span>
-                        <h4 className={`text-2xl font-black mt-1 ${stats.inadimplenciaPercent > 10 ? 'text-[#af101a]' : 'text-[#0f1b29]'}`}>{stats.inadimplenciaPercent}%</h4>
-                      </div>
-                    </div>
-
-                    {/* MASTER GRAPHICS & ANALYTICS ROW */}
-                    {!isPorteiroRole ? (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-                        {/* 1. Bar Chart representing delinquencies */}
-                        <div className="md:col-span-2 bg-white p-5 rounded-2xl border border-gray-150 shadow-sm space-y-4">
-                          <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider">Inadimplência Registrada (%)</h4>
-                          <div className="space-y-3">
-                            {visibleCondos.map(c => (
-                              <div key={c.id} className="space-y-1">
-                                <div className="flex justify-between text-xs">
-                                  <span className="text-secondary font-medium">{c.nome}</span>
-                                  <span className="font-bold text-[#af101a]">{c.inadimplenciaPercent}%</span>
-                                </div>
-                                <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                                  <div className="bg-[#af101a] h-full rounded-full" style={{ width: `${(c.inadimplenciaPercent / 25) * 100}%` }}></div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* 2. Receipts and Expenses summary box */}
-                        <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-sm flex flex-col justify-between">
-                          <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider text-left">Faturamento Consolidado</h4>
-                          <div className="space-y-3 my-4">
-                            <div className="flex justify-between items-center text-xs border-b border-gray-100 pb-2">
-                              <span className="text-gray-400">Total Receitas</span>
-                              <span className="font-bold text-emerald-600 font-mono">R$ {stats.receita.toLocaleString('pt-BR')}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-xs border-b border-gray-100 pb-2">
-                              <span className="text-gray-400">Total Despesas</span>
-                              <span className="font-bold text-[#af101a] font-mono">R$ {stats.despesa.toLocaleString('pt-BR')}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-gray-400">Saldo Líquido</span>
-                              <span className="font-bold text-primary font-mono">R$ {(stats.receita - stats.despesa).toLocaleString('pt-BR')}</span>
-                            </div>
-                          </div>
-                          
-                          <button
-                            onClick={() => handleExportCSV('financeiro')}
-                            className="w-full bg-[#101c29] text-white py-2.5 rounded-xl text-xs font-bold font-sans cursor-pointer hover:bg-slate-800 transition-all flex items-center justify-center gap-1.5"
-                          >
-                            <Download className="w-4 h-4" /> Exportar Planilha Financeira
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-2xl text-xs text-yellow-900 text-left">
-                        🔒 <strong>Políticas de RLS Ativas:</strong> Gráficos financeiros de faturamento e inadimplência estão restritos para o perfil <strong>Porteiro</strong>. Somente registros operacionais estão liberados.
-                      </div>
-                    )}
-
-                    {/* CONDO LISTINGS TABLE */}
-                    <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-sm text-left">
-                      <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-                        <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider">Unidades e Empreendimentos Auditados</h4>
-                        <span className="text-[10px] uppercase font-bold text-primary bg-blue-50 px-2 py-0.5 rounded">Processo de Gestão 2026</span>
-                      </div>
-
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-left">
-                          <thead>
-                            <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase text-[9px]">
-                              <th className="py-2.5">Nome do Condomínio</th>
-                              <th className="py-2.5">Síndico do Imóvel</th>
-                              <th className="py-2.5">Unidades</th>
-                              <th className="py-2.5">Status RLS</th>
-                              <th className="py-2.5 text-right">Ação</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {visibleCondos.map((c, i) => (
-                              <tr key={c.id} className="border-b border-gray-100 hover:bg-slate-50">
-                                <td className="py-3 font-bold text-[#0f1b29]">{c.nome}</td>
-                                <td className="py-3 text-secondary">{c.sindico}</td>
-                                <td className="py-3 font-mono">{c.unidades}</td>
-                                <td className="py-3">
-                                  <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                    c.status === 'Normal' ? 'bg-green-50 text-emerald-600' : 'bg-red-50 text-[#af101a]'
-                                  }`}>
-                                    {c.status}
-                                  </span>
-                                </td>
-                                <td className="py-3 text-right">
-                                  <button
-                                    onClick={() => setSelectedCondoId(c.id)}
-                                    className="bg-[#101c29] text-white p-1 px-3 rounded-lg text-[10px] font-semibold hover:bg-slate-800 cursor-pointer"
-                                  >
-                                    Ver Métricas
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                    <div className="bg-[#0B1B2F] text-white p-5 rounded-2xl flex flex-col justify-between">
+                      <span className="text-[10px] text-gray-400 block tracking-wider uppercase font-bold">Faturamento Estimado</span>
+                      <h4 className="text-2xl font-black mt-2 text-emerald-400">R$ {activeDetailedCondo.receita.toLocaleString('pt-BR')}</h4>
                     </div>
                   </div>
-                )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
+                    <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-xs flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] text-[#64748B] uppercase font-bold block">Despesa Mensal</span>
+                        <h4 className="text-xl font-bold text-red-500 mt-1">R$ {activeDetailedCondo.despesa.toLocaleString('pt-BR')}</h4>
+                      </div>
+                      <TrendingDown className="w-8 h-8 text-red-500 bg-red-50 p-1.5 rounded-lg" />
+                    </div>
+
+                    <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-xs flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] text-[#64748B] uppercase font-bold block">Saldo Técnico</span>
+                        <h4 className="text-xl font-bold text-emerald-600 mt-1">R$ {(activeDetailedCondo.receita - activeDetailedCondo.despesa).toLocaleString('pt-BR')}</h4>
+                      </div>
+                      <TrendingUp className="w-8 h-8 text-emerald-500 bg-emerald-50 p-1.5 rounded-lg" />
+                    </div>
+
+                    <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-xs flex justify-between items-center">
+                      <div>
+                        <span className="text-[10px] text-[#64748B] uppercase font-bold block">Inadimplência</span>
+                        <h4 className="text-xl font-bold text-amber-500 mt-1">{activeDetailedCondo.inadimplenciaPercent}%</h4>
+                      </div>
+                      <AlertCircle className="w-8 h-8 text-amber-500 bg-amber-50 p-1.5 rounded-lg" />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* 2. SUB-PAGE: SYSTEM-WIDE PREMIUM DASHBOARD */}
+                  {activeSubPage === 'dashboard' && (
+                    <div className="space-y-6">
+                      
+                      {/* Top Header Selector & Welcome Banner */}
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 text-left select-none">
+                        <div>
+                          <h1 className="text-2xl md:text-3xl font-extrabold text-[#0F172A] tracking-tight font-display flex items-center gap-2">
+                            Olá, {getActiveUserDetails().nome.split(' ')[0]}! <span className="animate-bounce inline-block">👋</span>
+                          </h1>
+                          <p className="text-xs text-[#64748B] mt-1">Aqui está o resumo operacional das suas diretrizes de RLS hoje.</p>
+                        </div>
+
+                        {/* Calendar Period Selector Box */}
+                        <div className="bg-white px-4 py-2.5 rounded-xl border border-[#E2E8F0] shadow-xs flex items-center gap-3 select-none hover:bg-slate-50 transition-colors cursor-pointer">
+                          <Calendar className="w-4.5 h-4.5 text-[#64748B]" />
+                          <div className="text-left leading-none font-sans">
+                            <span className="text-[9px] text-[#64748B] block font-bold uppercase tracking-wider">Faturamento Período</span>
+                            <span className="text-xs text-[#0F172A] font-extrabold">Julho 2026</span>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-[#64748B] rotate-90 ml-1 shrink-0" />
+                        </div>
+                      </div>
+
+                      {/* RLS Warning / Danger insight banner at the top */}
+                      {!isRlsAlertDismissed && (
+                        <div className="bg-[#FEF2F2] border border-[#FEE2E2] p-4 rounded-2xl text-xs text-[#991B1B] text-left flex items-start gap-4 shadow-xs relative transition-all animate-fade-in pr-10">
+                          <div className="bg-[#FEE2E2] p-1.5 rounded-xl text-[#EF4444] shrink-0">
+                            <ShieldAlert className="w-4 h-4" />
+                          </div>
+                          <div className="space-y-1">
+                            <span className="font-extrabold text-[#EF4444] text-[13px] tracking-wide flex items-center gap-1.5 leading-none">
+                              Diretrizes de RLS Ativas • Filtro de Isolamento
+                            </span>
+                            <p className="text-[#64748B] leading-relaxed">
+                              <strong>Parque das Amoreiras</strong> registra inadimplência de <strong className="text-red-500 font-bold">21,0%</strong>. Se operando sob os perfis Síndico/Conselheiro/Morador, as políticas de segurança ocultam outros empreendimentos para proteger o direito civil dos condôminos na base relacional do PostgreSQL.
+                            </p>
+                          </div>
+                          
+                          <button 
+                            onClick={() => setIsRlsAlertDismissed(true)}
+                            className="absolute top-4 right-4 p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* KPI Cards section (rounded 20px, borders, shadows) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 text-left select-none">
+                        
+                        {/* KPI 1: CONDOMÍNIOS */}
+                        <div className="bg-white p-5 rounded-[20px] border border-[#E2E8F0] shadow-[0_4px_20px_rgba(15,23,42,0.03)] flex flex-col justify-between hover:border-blue-200 transition-all duration-300 group">
+                          <div>
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center font-bold shadow-xs">
+                                <Building2 className="w-5 h-5 animate-pulse" />
+                              </div>
+                              <div className="text-left leading-none font-sans">
+                                <span className="text-[10px] text-[#64748B] uppercase tracking-wider font-extrabold block">Condomínios</span>
+                                <span className="text-[10px] text-[#64748B]">Ativos</span>
+                              </div>
+                            </div>
+                            
+                            <h4 className="text-3xl font-black text-[#0F172A] mt-4 font-display transition-transform group-hover:scale-105 duration-300">
+                              {stats.totalCondos}
+                            </h4>
+                          </div>
+
+                          <button 
+                            onClick={() => setActiveSubPage('condominios')}
+                            className="text-xs font-bold text-[#0E7C66] hover:text-emerald-700 transition-colors mt-4 flex items-center gap-1 border-0 bg-transparent cursor-pointer pl-0"
+                          >
+                            Ver detalhes <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* KPI 2: UNIDADES TOTAIS */}
+                        <div className="bg-white p-5 rounded-[20px] border border-[#E2E8F0] shadow-[0_4px_20px_rgba(15,23,42,0.03)] flex flex-col justify-between hover:border-purple-200 transition-all duration-300 group">
+                          <div>
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-full bg-purple-50 text-purple-500 flex items-center justify-center font-bold shadow-xs">
+                                <Users className="w-5 h-5" />
+                              </div>
+                              <div className="text-left leading-none font-sans">
+                                <span className="text-[10px] text-[#64748B] uppercase tracking-wider font-extrabold block">Unidades Totais</span>
+                                <span className="text-[10px] text-[#64748B]">Cadastradas</span>
+                              </div>
+                            </div>
+                            
+                            <h4 className="text-3xl font-black text-[#0F172A] mt-4 font-display transition-transform group-hover:scale-105 duration-300">
+                              {stats.unidades}
+                            </h4>
+                          </div>
+
+                          <button 
+                            onClick={() => setActiveSubPage('condominios')}
+                            className="text-xs font-bold text-[#0E7C66] hover:text-emerald-700 transition-colors mt-4 flex items-center gap-1 border-0 bg-transparent cursor-pointer pl-0"
+                          >
+                            Ver detalhes <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* KPI 3: MORADORES ATIVOS */}
+                        <div className="bg-white p-5 rounded-[20px] border border-[#E2E8F0] shadow-[0_4px_20px_rgba(15,23,42,0.03)] flex flex-col justify-between hover:border-amber-200 transition-all duration-300 group">
+                          <div>
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center font-bold shadow-xs">
+                                <UserCheck className="w-5 h-5" />
+                              </div>
+                              <div className="text-left leading-none font-sans">
+                                <span className="text-[10px] text-[#64748B] uppercase tracking-wider font-extrabold block">Moradores Ativos</span>
+                                <span className="text-[10px] text-[#64748B]">Cadastrados</span>
+                              </div>
+                            </div>
+                            
+                            <h4 className="text-3xl font-black text-[#0F172A] mt-4 font-display transition-transform group-hover:scale-105 duration-300">
+                              {stats.moradores}
+                            </h4>
+                          </div>
+
+                          <button 
+                            onClick={() => setActiveSubPage('moradores')}
+                            className="text-xs font-bold text-[#0E7C66] hover:text-emerald-700 transition-colors mt-4 flex items-center gap-1 border-0 bg-transparent cursor-pointer pl-0"
+                          >
+                            Ver detalhes <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* KPI 4: INADIMPLÊNCIA MÉDIA */}
+                        <div className="bg-white p-5 rounded-[20px] border border-[#E2E8F0] shadow-[0_4px_20px_rgba(15,23,42,0.03)] flex flex-col justify-between hover:border-emerald-200 transition-all duration-300 group">
+                          <div>
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-full bg-emerald-50 text-[#10B981] flex items-center justify-center font-bold shadow-xs">
+                                <TrendingUp className="w-5 h-5 text-[#10B981]" />
+                              </div>
+                              <div className="text-left leading-none font-sans">
+                                <span className="text-[10px] text-[#64748B] uppercase tracking-wider font-extrabold block">Inadimplência</span>
+                                <span className="text-[10px] text-[#64748B]">Média Unificada</span>
+                              </div>
+                            </div>
+                            
+                            <h4 className="text-3xl font-black text-[#0F172A] mt-4 font-display transition-transform group-hover:scale-105 duration-300">
+                              {stats.inadimplenciaPercent}%
+                            </h4>
+                          </div>
+
+                          <button 
+                            onClick={() => setActiveSubPage('financeiro')}
+                            className="text-xs font-bold text-[#0E7C66] hover:text-emerald-700 transition-colors mt-4 flex items-center gap-1 border-0 bg-transparent cursor-pointer pl-0"
+                          >
+                            Ver detalhes <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                      </div>
+
+                      {/* Charts and consolidated faturamento layout */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-left">
+                        
+                        {/* Area 1: Spline line area graph (col-span-2) */}
+                        <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-[#E2E8F0] shadow-[0_8px_30px_rgba(15,23,42,0.02)] flex flex-col justify-between">
+                          <div className="space-y-4">
+                            
+                            {/* Graphic Top Indicators */}
+                            <div className="flex justify-between items-center flex-wrap gap-2 select-none">
+                              <h4 className="text-[11.5px] font-extrabold text-[#0F172A] uppercase tracking-wider flex items-center gap-1.5 leading-none">
+                                Histórico de Inadimplência (%) 
+                                <div className="group relative">
+                                  <AlertCircle className="w-3.5 h-3.5 text-gray-300 hover:text-gray-600 cursor-pointer" />
+                                  <span className="absolute left-1/2 -translate-x-1/2 bottom-5 scale-0 group-hover:scale-100 bg-[#0F172A] text-white text-[9px] px-2 py-1 rounded whitespace-nowrap shadow-md transition-all duration-200">Competência mensal consolidada do sistema</span>
+                                </div>
+                              </h4>
+                              
+                              <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg px-2.5 py-1 text-[11px] font-bold text-[#64748B] flex items-center gap-1 cursor-pointer hover:bg-slate-50 transition-colors">
+                                <span>Últimos 6 meses</span>
+                                <ChevronRight className="w-3 h-3 rotate-90 text-gray-400" />
+                              </div>
+                            </div>
+
+                            {/* RLS Authorization Checking inside graphics workspace */}
+                            {!isPorteiroRole ? (
+                              <>
+                                {/* Flawless Custom SVG Cubic Spline line area chart */}
+                                <div className="h-[210px] w-full relative mt-4 select-none">
+                                  <svg className="w-full h-full" viewBox="0 0 600 210" preserveAspectRatio="none">
+                                    <defs>
+                                      <linearGradient id="chart-grad" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#10B981" stopOpacity="0.18"/>
+                                        <stop offset="100%" stopColor="#10B981" stopOpacity="0.0"/>
+                                      </linearGradient>
+                                    </defs>
+
+                                    {/* Grid Lines */}
+                                    <line x1="40" y1="30" x2="570" y2="30" stroke="#F8FAFC" strokeWidth="1" />
+                                    <line x1="40" y1="80" x2="570" y2="80" stroke="#F8FAFC" strokeWidth="1" />
+                                    <line x1="40" y1="130" x2="570" y2="130" stroke="#F8FAFC" strokeWidth="1" />
+                                    <line x1="40" y1="180" x2="570" y2="180" stroke="#E2E8F0" strokeWidth="1.5" />
+
+                                    {/* Y Axis Labels */}
+                                    <text x="12" y="34" className="text-[9px] font-semibold text-[#94A3B8] font-mono">30%</text>
+                                    <text x="12" y="84" className="text-[9px] font-semibold text-[#94A3B8] font-mono">20%</text>
+                                    <text x="12" y="134" className="text-[9px] font-semibold text-[#94A3B8] font-mono">10%</text>
+                                    <text x="12" y="184" className="text-[9px] font-semibold text-[#94A3B8] font-mono">0%</text>
+
+                                    {/* Spline Path Filled Area */}
+                                    <path 
+                                      d="M 60 135 C 150 120, 180 115, 230 110 C 280 105, 300 115, 340 110 C 380 105, 410 100, 460 97 C 510 94, 530 90, 550 85 L 550 180 L 60 180 Z" 
+                                      fill="url(#chart-grad)"
+                                    />
+
+                                    {/* Spline Path Line */}
+                                    <path 
+                                      d="M 60 135 C 150 120, 180 115, 230 110 C 280 105, 300 115, 340 110 C 380 105, 410 100, 460 97 C 510 94, 530 90, 550 85" 
+                                      fill="none" 
+                                      stroke="#10B981" 
+                                      strokeWidth="3.5" 
+                                      strokeLinecap="round"
+                                    />
+
+                                    {/* Interactive Nodes */}
+                                    <circle cx="60" cy="135" r="4.5" fill="#ffffff" stroke="#10B981" strokeWidth="2.5" />
+                                    <text x="60" y="118" textAnchor="middle" className="text-[10px] font-extrabold text-[#0F172A] font-sans">18,7%</text>
+                                    
+                                    <circle cx="158" cy="129" r="4.5" fill="#ffffff" stroke="#10B981" strokeWidth="2.5" />
+                                    <text x="158" y="112" textAnchor="middle" className="text-[10px] font-extrabold text-[#0F172A] font-sans">19,5%</text>
+
+                                    <circle cx="256" cy="123" r="4.5" fill="#ffffff" stroke="#10B981" strokeWidth="2.5" />
+                                    <text x="256" y="106" textAnchor="middle" className="text-[10px] font-extrabold text-[#0F172A] font-sans">20,1%</text>
+
+                                    <circle cx="354" cy="125" r="4.5" fill="#ffffff" stroke="#10B981" strokeWidth="2.5" />
+                                    <text x="354" y="108" textAnchor="middle" className="text-[10px] font-extrabold text-[#0F172A] font-sans">19,8%</text>
+
+                                    <circle cx="452" cy="121" r="4.5" fill="#ffffff" stroke="#10B981" strokeWidth="2.5" />
+                                    <text x="452" y="104" textAnchor="middle" className="text-[10px] font-extrabold text-[#0F172A] font-sans">20,3%</text>
+
+                                    <circle cx="550" cy="116" r="4.5" fill="#ffffff" stroke="#10B981" strokeWidth="2.5" />
+                                    <text x="550" y="99" textAnchor="middle" className="text-[10px] font-extrabold text-[#0F172A] font-sans">21,0%</text>
+                                  </svg>
+                                </div>
+                                
+                                <div className="flex justify-between text-[10px] font-bold text-[#94A3B8] px-10 mt-1 font-sans select-none">
+                                  <span>Fev</span>
+                                  <span>Mar</span>
+                                  <span>Abr</span>
+                                  <span>Mai</span>
+                                  <span>Jun</span>
+                                  <span>Jul</span>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="bg-amber-50/50 border border-amber-200/50 p-6 rounded-2xl text-xs text-amber-900 text-left flex flex-col justify-center items-center py-10">
+                                <Lock className="w-8 h-8 text-amber-500 mb-2 animate-bounce" />
+                                <strong className="font-extrabold block text-sm">Visualização Restrita por RLS</strong>
+                                <p className="text-[#64748B] text-center mt-1">Como Porteiro do condomínio, os seus direitos civis do PostgreSQL restringem acesso a relatórios e análises financeiras.</p>
+                              </div>
+                            )}
+
+                          </div>
+
+                          {/* Interactive alert note at the bottom of chart card */}
+                          <div className="mt-5 bg-[#ECFDF5] text-[#0E7C66] px-4 py-3 rounded-xl border border-emerald-500/10 text-xs flex items-center justify-between font-medium cursor-pointer hover:bg-[#D1FAE5] transition-all group flex-wrap gap-2 select-none">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="w-4 h-4 text-[#10B981] group-hover:scale-110 transition-transform" />
+                              <span>Parque das Amoreiras possui a maior inadimplência unificada: <strong className="font-extrabold text-[#059669]">21,0%</strong></span>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-[#10B981] transition-transform group-hover:translate-x-1" />
+                          </div>
+
+                        </div>
+
+                        {/* Area 2: Faturamento Consolidado info block */}
+                        <div className="bg-white p-6 rounded-3xl border border-[#E2E8F0] shadow-[0_8px_30px_rgba(15,23,42,0.02)] flex flex-col justify-between">
+                          
+                          <div className="space-y-4">
+                            <div className="flex justify-between items-center select-none">
+                              <h4 className="text-[11.5px] font-extrabold text-[#0F172A] uppercase tracking-wider leading-none">Faturamento Consolidado</h4>
+                              <div className="h-8 w-8 rounded-lg bg-slate-50 border border-slate-150 flex items-center justify-center text-gray-400">
+                                <Wallet className="w-4.5 h-4.5" />
+                              </div>
+                            </div>
+
+                            {/* Consolidated rows */}
+                            {!isPorteiroRole ? (
+                              <div className="space-y-4 py-3 select-none">
+                                <div className="flex justify-between items-center text-xs border-b border-gray-100 pb-3">
+                                  <span className="text-[#64748B] font-semibold font-sans">Total Receitas</span>
+                                  <span className="font-extrabold text-[#22C55E] font-mono text-sm">R$ {stats.receita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                </div>
+                                
+                                <div className="flex justify-between items-center text-xs border-b border-gray-100 pb-3">
+                                  <span className="text-[#64748B] font-semibold font-sans">Total Despesas</span>
+                                  <span className="font-extrabold text-[#EF4444] font-mono text-sm">R$ {stats.despesa.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                </div>
+
+                                <div className="flex justify-between items-end pt-3 text-left">
+                                  <div>
+                                    <span className="text-[#64748B] font-bold font-sans text-[10px] uppercase tracking-wider block mb-1">Saldo Líquido</span>
+                                    <span className="text-2xl font-black text-[#0F172A] font-display">
+                                      R$ {(stats.receita - stats.despesa).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bg-rose-50/50 border border-rose-100 p-4 rounded-xl text-xs text-rose-800 py-6 text-center">
+                                🔒 Dados de faturamento bloqueados por RLS Corporativo.
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Gradient action button (14px radius, 48px height) */}
+                          <button
+                            disabled={isPorteiroRole}
+                            onClick={() => handleExportCSV('financeiro')}
+                            className="w-full bg-gradient-to-r from-[#10B981] to-[#059669] text-white h-12 rounded-[14px] text-xs font-bold font-sans cursor-pointer hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5 transition-all duration-250 active:scale-95 flex items-center justify-center gap-2 select-none disabled:opacity-50 disabled:cursor-not-allowed text-[13px]"
+                          >
+                            <Download className="w-4.5 h-4.5" /> Exportar Planilha Financeira
+                          </button>
+
+                        </div>
+
+                      </div>
+
+                      {/* Actions grid list & user activities matching layout */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-left">
+                        
+                        {/* Column A: Actions grid (size 2/3) */}
+                        <div className="lg:col-span-2 space-y-4">
+                          <h4 className="text-[11.5px] font-extrabold text-[#0F172A] uppercase tracking-wider leading-none select-none">Ações Rápidas</h4>
+                          
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            
+                            {/* Action 1 */}
+                            <button 
+                              onClick={() => setActiveSubPage('condominios')}
+                              className="bg-white p-4 rounded-2xl border border-[#E2E8F0] hover:border-emerald-300 hover:shadow-md transition-all duration-250 text-left cursor-pointer group flex flex-col gap-3 min-h-[105px] justify-between shadow-xs"
+                            >
+                              <div className="h-9 w-9 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-xs">
+                                <Building2 className="w-4.5 h-4.5" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-extrabold text-[#0F172A] leading-tight">Novo Condomínio</p>
+                                <p className="text-[10px] text-[#64748B] mt-0.5 font-sans">Criar base</p>
+                              </div>
+                            </button>
+
+                            {/* Action 2 */}
+                            <button 
+                              onClick={() => setActiveSubPage('financeiro')}
+                              className="bg-white p-4 rounded-2xl border border-[#E2E8F0] hover:border-purple-300 hover:shadow-md transition-all duration-250 text-left cursor-pointer group flex flex-col gap-3 min-h-[105px] justify-between shadow-xs"
+                            >
+                              <div className="h-9 w-9 rounded-xl bg-purple-50 text-purple-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-xs">
+                                <FileText className="w-4.5 h-4.5" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-extrabold text-[#0F172A] leading-tight">Balanços</p>
+                                <p className="text-[10px] text-[#64748B] mt-0.5 font-sans">Visualizar fluxos</p>
+                              </div>
+                            </button>
+
+                            {/* Action 3 */}
+                            <button 
+                              onClick={() => setActiveSubPage('portaria')}
+                              className="bg-white p-4 rounded-2xl border border-[#E2E8F0] hover:border-blue-300 hover:shadow-md transition-all duration-250 text-left cursor-pointer group flex flex-col gap-3 min-h-[105px] justify-between shadow-xs"
+                            >
+                              <div className="h-9 w-9 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-xs">
+                                <Key className="w-4.5 h-4.5" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-extrabold text-[#0F172A] leading-tight">Portaria Hub</p>
+                                <p className="text-[10px] text-[#64748B] mt-0.5 font-sans">Acessar guarita</p>
+                              </div>
+                            </button>
+
+                            {/* Action 4 */}
+                            <button 
+                              onClick={() => setActiveSubPage('auditoria')}
+                              className="bg-white p-4 rounded-2xl border border-[#E2E8F0] hover:border-red-300 hover:shadow-md transition-all duration-250 text-left cursor-pointer group flex flex-col gap-3 min-h-[105px] justify-between shadow-xs"
+                            >
+                              <div className="h-9 w-9 rounded-xl bg-red-50 text-red-500 flex items-center justify-center group-hover:scale-110 transition-transform shadow-xs">
+                                <Activity className="w-4.5 h-4.5" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-extrabold text-[#0F172A] leading-tight">Auditoria Logs</p>
+                                <p className="text-[10px] text-[#64748B] mt-0.5 font-sans">Buscar rastros</p>
+                              </div>
+                            </button>
+
+                          </div>
+                        </div>
+
+                        {/* Column B: Recent Activities (size 1/3) */}
+                        <div className="space-y-4 flex flex-col h-full min-h-[140px] justify-start">
+                          <h4 className="text-[11.5px] font-extrabold text-[#0F172A] uppercase tracking-wider leading-none select-none">Atividades Recentes</h4>
+                          
+                          <div className="flex-1 bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-xs flex flex-col items-center justify-center text-center py-6">
+                            <div className="h-9 w-9 rounded-full bg-slate-50 flex items-center justify-center text-gray-400 mb-2.5 border border-slate-100 animate-pulse">
+                              <Clock className="w-5 h-5" />
+                            </div>
+                            <p className="text-xs font-bold text-[#0F172A]">Nenhuma atividade recente</p>
+                            <p className="text-[10px] text-[#64748B] mt-0.5 font-sans">As ações realizadas aparecerão aqui.</p>
+                          </div>
+                        </div>
+
+                      </div>
+
+                    </div>
+                  )}
 
                 {/* 3. SUB-PAGE: CONDOMINIOS CRUD */}
                 {activeSubPage === 'condominios' && (
@@ -1415,6 +1983,218 @@ export default function AdminDashboardModal({
                   </div>
                 )}
 
+                {/* SUB-PAGE: GERENCIAMENTO DE PERFIS / ROLES */}
+                {activeSubPage === 'perfis' && (
+                  <div className="space-y-6 text-left animate-fade-in text-[#101c29]">
+                    <div className="bg-[#101c29] text-white p-5 rounded-2xl border border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                      <div className="space-y-1">
+                        <span className="bg-[#af101a] text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded animate-pulse">
+                          Segurança e Governança
+                        </span>
+                        <h3 className="text-lg font-bold font-display flex items-center gap-2">
+                          <ShieldCheck className="w-5 h-5 text-emerald-400" /> Matriz de Perfis e Roles do Sistema
+                        </h3>
+                        <p className="text-xs text-gray-300">
+                          Apenas administradores possuem acesso de modificação rápida para inserir, alterar ou remover permissões.
+                        </p>
+                      </div>
+                      <div className="bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/10 text-xs font-mono text-gray-300">
+                        Perfil Ativo: <strong className="text-emerald-400 uppercase font-black">{activeProfile}</strong>
+                      </div>
+                    </div>
+
+                    {/* Alerta de permissão para outros perfis que não sejam admin */}
+                    {activeProfile !== 'admin' && (
+                      <div className="bg-amber-50 border border-amber-250 p-4 rounded-xl text-xs text-amber-900 flex items-start gap-3">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong>Acesso Restrito ao Administrador (Root)!</strong> Você está logado/operando como <strong className="uppercase">{activeProfile}</strong>. O formulário de cadastro, adição, alteração e deleção está bloqueado pela diretriz de RLS. Você possui permissão exclusivamente de leitura.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Se for administrador, exibe formulário de adição / edição de perfil */}
+                    {activeProfile === 'admin' && (
+                      <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm space-y-4">
+                        <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 border-b border-gray-100 pb-2">
+                          <Plus className="w-4 h-4 text-emerald-500" /> {selectedProfileId ? 'Editar Perfil / Role' : 'Registrar Novo Usuário com Role de Acesso'}
+                        </h4>
+
+                        <form onSubmit={handleCreateOrUpdateProfile} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase block">Nome Completo *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newProfileNome}
+                              onChange={(e) => setNewProfileNome(e.target.value)}
+                              placeholder="Felipe Albuquerque"
+                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase block">E-mail de Acesso *</label>
+                            <input
+                              type="email"
+                              required
+                              value={newProfileEmail}
+                              onChange={(e) => setNewProfileEmail(e.target.value)}
+                              placeholder="felipe@facilities.com.br"
+                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase block">CPF</label>
+                            <input
+                              type="text"
+                              value={newProfileCpf}
+                              onChange={(e) => setNewProfileCpf(e.target.value)}
+                              placeholder="000.000.000-00"
+                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase block">Unidade / Setor de Gestão</label>
+                            <input
+                              type="text"
+                              value={newProfileUnidade}
+                              onChange={(e) => setNewProfileUnidade(e.target.value)}
+                              placeholder="Ex: Apto 104 ou Setor Geral"
+                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase block">Papel de Acesso / Role *</label>
+                            <select
+                              required
+                              value={newProfileTipo}
+                              onChange={(e) => setNewProfileTipo(e.target.value)}
+                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-bold text-[#101c29] cursor-pointer"
+                            >
+                              <option value="morador">Morador (Apenas Consulta e Unidade)</option>
+                              <option value="proprietario">Proprietário (Condômino Donatário)</option>
+                              <option value="sindico">Síndico (Gestor Geral do Condomínio)</option>
+                              <option value="subsindico">Subsíndico (Apoio Setorial de Gestão)</option>
+                              <option value="conselheiro">Conselheiro (Fiscal e Auditor Read-Only)</option>
+                              <option value="porteiro">Porteiro (Controle de Acesso de Portaria)</option>
+                              <option value="colaborador">Colaborador (Prestador Interno)</option>
+                              <option value="administrador">Administrador (Controle Total Master)</option>
+                            </select>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="submit"
+                              className="flex-1 bg-primary hover:bg-[#af101a] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer text-center"
+                            >
+                              {selectedProfileId ? 'Salvar Alterações' : 'Adicionar Usuário'}
+                            </button>
+                            {selectedProfileId && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedProfileId(null);
+                                  setNewProfileNome('');
+                                  setNewProfileEmail('');
+                                  setNewProfileCpf('');
+                                  setNewProfileUnidade('');
+                                  setNewProfileTipo('morador');
+                                }}
+                                className="bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold px-3 py-2.5 text-xs rounded-lg transition-transform active:scale-95 cursor-pointer text-center"
+                              >
+                                Cancelar
+                              </button>
+                            )}
+                          </div>
+                        </form>
+                      </div>
+                    )}
+
+                    {/* Tabela de listagem dos Perfis de Roles existentes */}
+                    <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left space-y-4">
+                      <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                        <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider">
+                          Perfis Registrados e Autenticações do Sistema
+                        </h4>
+                        <span className="text-[10px] text-gray-400 font-bold">
+                          Total: {profilesList.length} Usuários
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left">
+                          <thead>
+                            <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase text-[9px]">
+                              <th className="py-2">Nome Completo</th>
+                              <th className="py-2">E-mail</th>
+                              <th className="py-2">CPF</th>
+                              <th className="py-2">Unidade</th>
+                              <th className="py-2">Role Atribuída</th>
+                              <th className="py-2 text-right">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {profilesList.map(item => {
+                              const badgeStyle = 
+                                item.tipo === 'administrador' || item.tipo === 'admin'
+                                  ? 'bg-red-50 text-red-650 border border-red-150'
+                                  : item.tipo === 'sindico' || item.tipo === 'síndico'
+                                    ? 'bg-[#0f1b29]/10 text-[#0f1b29] border border-[#0f1b29]/10'
+                                    : item.tipo === 'colaborador' || item.tipo === 'colab'
+                                      ? 'bg-amber-50 text-amber-600 border border-amber-100'
+                                      : item.tipo === 'porteiro'
+                                        ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                                        : item.tipo === 'conselheiro'
+                                          ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                          : 'bg-indigo-50 text-indigo-600 border border-indigo-100';
+
+                              return (
+                                <tr key={item.id} className="border-b border-gray-100 hover:bg-slate-50">
+                                  <td className="py-3 font-bold text-stone-850">{item.nome}</td>
+                                  <td className="py-3 text-gray-600 font-mono select-all">{item.email}</td>
+                                  <td className="py-3 text-secondary font-mono">{item.cpf || 'Não informado'}</td>
+                                  <td className="py-3 font-bold">{item.unidade || 'Apto Geral'}</td>
+                                  <td className="py-3">
+                                    <span className={`inline-block px-2.5 py-0.5 rounded text-[8.5px] font-semibold uppercase tracking-wider ${badgeStyle}`}>
+                                      {item.perfil || item.tipo}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 text-right">
+                                    {activeProfile === 'admin' ? (
+                                      <div className="flex justify-end gap-2.5">
+                                        <button
+                                          onClick={() => {
+                                            setSelectedProfileId(item.id);
+                                            setNewProfileNome(item.nome);
+                                            setNewProfileEmail(item.email);
+                                            setNewProfileCpf(item.cpf || '');
+                                            setNewProfileUnidade(item.unidade || '');
+                                            setNewProfileTipo(item.tipo);
+                                          }}
+                                          className="text-amber-650 hover:text-amber-800 font-bold hover:underline bg-transparent border-none cursor-pointer"
+                                        >
+                                          Editar
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteProfile(item.id, item.nome)}
+                                          className="text-red-650 hover:text-red-800 font-bold hover:underline bg-transparent border-none cursor-pointer"
+                                        >
+                                          Remover
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span className="text-[9px] text-gray-400 italic">Read-Only</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* 6. SUB-PAGE: AUDITORIA LOGS (CRUD AUDITED ACTION TIMELINE) */}
                 {activeSubPage === 'auditoria' && (
                   <div className="space-y-6 text-left">
@@ -1693,6 +2473,8 @@ export default function AdminDashboardModal({
           </div>
 
         </div>
+
+      </div>
 
         {/* MODAL FOOTER AND SYSTEM AUDIT DETAILS */}
         <div className="bg-gray-55 border-t border-gray-150 px-6 py-4 md:px-8 flex flex-col sm:flex-row justify-between items-center text-[10px] text-gray-400 shrink-0 select-none gap-2">
