@@ -105,6 +105,76 @@ function mapDbProfileToInterface(dbData: any): UserProfile {
   };
 }
 
+// Auto-create/ensure database profile exists for authenticated sessions
+export async function ensureAndGetProfile(authUser: any): Promise<UserProfile | null> {
+  if (!authUser) return null;
+  
+  const existing = await queryPerfisTable(authUser.id);
+  if (existing) {
+    return existing;
+  }
+
+  if (!isSupabaseConfigured) {
+    return null;
+  }
+
+  try {
+    const meta = authUser.user_metadata || {};
+    const email = authUser.email || '';
+    const name = meta.full_name || meta.name || 'Usuário';
+    const unit = meta.unit || 'Apto Geral';
+    const rawRole = meta.profile || meta.role || 'morador';
+    const cpf = meta.cpf || '';
+    
+    const normalizedRole = rawRole.toLowerCase()
+      .replace('síndico', 'sindico')
+      .replace('subsíndico', 'subsindico')
+      .replace('proprietário', 'proprietario')
+      .trim();
+
+    const insertPayload = {
+      id: authUser.id,
+      auth_user_id: authUser.id,
+      nome: name,
+      email: email,
+      unidade: unit,
+      tipo: normalizedRole,
+      perfil: rawRole,
+      cpf: cpf
+    };
+
+    console.log('[ensureAndGetProfile] Criando perfil ausente pós-autenticação para o usuário:', authUser.id, insertPayload);
+    
+    // Tenta inserir o perfil completo com permissão do usuário autenticado no RLS
+    let { error: insertError } = await supabase.from('perfis').upsert(insertPayload);
+    
+    if (insertError) {
+      console.warn('[ensureAndGetProfile] Erro ao criar perfil completo, tentando versão simplificada:', insertError.message);
+      // Fallback simplificado se o banco de dados tiver esquemas estritos ou restrições de coluna
+      const corePayload = {
+        id: authUser.id,
+        auth_user_id: authUser.id,
+        nome: name,
+        email: email,
+        tipo: normalizedRole
+      };
+      const { error: coreError } = await supabase.from('perfis').upsert(corePayload);
+      insertError = coreError;
+    }
+
+    if (insertError) {
+      console.error('[ensureAndGetProfile] Falha grave ao gravar perfil:', insertError.message);
+      return null;
+    }
+
+    // Retorna o perfil consultado com sucesso
+    return await queryPerfisTable(authUser.id);
+  } catch (err) {
+    console.error('[ensureAndGetProfile] Falha na sincronização automatizada do perfil:', err);
+    return null;
+  }
+}
+
 interface PortalRouterProviderProps {
   children: React.ReactNode;
   onShowNotification: (title: string, text: string) => void;
@@ -149,8 +219,8 @@ export function PortalRouterProvider({
             setUser(session.user);
             setIsLoggedIn(true);
             
-            // Validate profile
-            const userProf = await queryPerfisTable(session.user.id);
+            // Validate profile and auto-create if missing (e.g. from RLS signup failure)
+            const userProf = await ensureAndGetProfile(session.user);
             if (userProf) {
               setProfile(userProf);
               setProfileError(null);
@@ -211,7 +281,7 @@ export function PortalRouterProvider({
         setSessionLoading(true);
         
         try {
-          const userProf = await queryPerfisTable(session.user.id);
+          const userProf = await ensureAndGetProfile(session.user);
           if (userProf) {
             setProfile(userProf);
             setProfileError(null);
@@ -426,9 +496,9 @@ export function PortalRouterProvider({
         throw error;
       }
       
-      // Load profile to verify permissions immediately
+      // Load profile to verify permissions immediately and auto-create if missing
       if (data?.user) {
-        const userProf = await queryPerfisTable(data.user.id);
+        const userProf = await ensureAndGetProfile(data.user);
         if (userProf) {
           setProfile(userProf);
           setProfileError(null);
@@ -473,7 +543,7 @@ export function PortalRouterProvider({
     }
 
     try {
-      // 1. Criar conta no Auth
+      // 1. Criar conta no Auth - salvando dados essenciais no metadata incluindo o CPF
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: pass,
@@ -481,7 +551,8 @@ export function PortalRouterProvider({
           data: {
             full_name: name,
             unit: unit,
-            profile: role
+            profile: role,
+            cpf: cpf
           }
         }
       });
@@ -538,7 +609,7 @@ export function PortalRouterProvider({
           // If a session is already returned from sign up, we can use it directly
           if (data.session) {
             setUser(data.user);
-            const userProf = await queryPerfisTable(data.user.id) || {
+            const userProf = await ensureAndGetProfile(data.user) || {
               id: data.user.id,
               auth_user_id: data.user.id,
               nome: name.trim(),

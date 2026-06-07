@@ -485,8 +485,8 @@ export default function AdminDashboardModal({
   };
 
   return (
-    <div id="admin-dashboard-overlay" className="fixed inset-0 bg-[#070b12]/85 backdrop-blur-md z-5xl flex items-center justify-center p-0 md:p-6 overflow-y-auto animate-fade-in font-sans">
-      <div id="admin-dashboard-card" className="bg-white rounded-none md:rounded-[32px] w-full max-w-7xl h-full md:h-[90vh] border border-[#cfdbec] shadow-2xl overflow-hidden flex flex-col">
+    <div id="admin-dashboard-overlay" className="fixed inset-0 bg-[#070b12] z-50 flex items-stretch justify-stretch overflow-y-auto animate-fade-in font-sans">
+      <div id="admin-dashboard-card" className="bg-white w-full h-screen border-none shadow-none overflow-hidden flex flex-col">
         
         {/* UPPER SENSITIVE REAL-TIME SECURITY PLAYGROUND SWITCHER */}
         {!currentUser ? (

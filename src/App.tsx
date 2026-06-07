@@ -140,6 +140,8 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
     ? 'blog' 
     : currentPath === 'faq-seo-section'
     ? 'faq'
+    : currentPath.startsWith('dashboard')
+    ? 'dashboard'
     : 'home';
 
   const viewSlug = (viewType === 'servico' || viewType === 'local') 
@@ -246,16 +248,21 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
       )}
 
       {/* Corporate Nav Header bar component */}
-      <Header 
-        onOpenPortal={() => setIsPortalOpen(true)} 
-        onOpenQuote={() => setIsQuoteOpen(true)} 
-        onNavigate={handleNavigate}
-        currentViewType={viewType}
-        onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
-      />
+      {viewType !== 'dashboard' && (
+        <Header 
+          onOpenPortal={() => setIsPortalOpen(true)} 
+          onOpenQuote={() => setIsQuoteOpen(true)} 
+          onNavigate={handleNavigate}
+          currentViewType={viewType}
+          onOpenAdminDashboard={() => {
+            setIsAdminDashboardOpen(true);
+            window.location.hash = '#dashboard';
+          }}
+        />
+      )}
 
       {/* Main Page Content */}
-      <main className="mt-20">
+      <main className={viewType === 'dashboard' ? '' : 'mt-20'}>
         
         {/* HOMEPAGE VIEW */}
         {viewType === 'home' && (
@@ -385,14 +392,17 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
                           href="https://play.google.com" 
                           target="_blank" 
                           rel="noopener noreferrer" 
-                          className="bg-black hover:bg-black/80 text-white px-5 py-2.5 rounded-xl border border-white/15 flex items-center gap-3 transition-all hover:scale-105"
+                          className="bg-black hover:bg-black/95 text-white px-5 py-2.5 rounded-xl border border-white/15 flex items-center gap-3 transition-all hover:scale-105 shadow-md hover:shadow-lg"
                         >
-                          <svg className="w-5 h-5 text-white shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M5,3H19A2,2 0 0,1 21,5V19A2,2 0 0,1 19,21H5A2,2 0 0,1 3,19V5A2,2 0 0,1 5,3M17.5,12L12,6.5V11H7V13H12V17.5L17.5,12Z" />
+                          <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none">
+                            <path d="M3.224 1.15c-.15.176-.224.441-.224.77v20.16c0 .329.074.594.224.77l.07.065L14.73 12.064v-.128L3.294 1.085l-.07.065z" fill="#3bccff" />
+                            <path d="M18.544 15.908l-3.814-3.844v-.128l3.815-3.844.084.049 4.512 2.571c1.29.734 1.29 1.933 0 2.667l-4.512 2.571-.085.059z" fill="#ffd600" />
+                            <path d="M18.629 15.849L14.73 11.95 3.224 22.842c.42.441 1.115.49 1.916.035l13.489-7.028z" fill="#ff2d37" />
+                            <path d="M18.629 8.151L5.14 1.123C4.339.668 3.644.717 3.224 1.158L14.73 12.05l3.899-3.899z" fill="#00f176" />
                           </svg>
                           <div className="text-left font-sans">
-                            <p className="text-[9px] uppercase text-gray-400 leading-none">Aplicativo para</p>
-                            <p className="text-xs font-bold leading-tight">Android (Google Play)</p>
+                            <p className="text-[9px] uppercase text-gray-400 leading-none">Disponível no</p>
+                            <p className="text-xs font-bold leading-tight">Google Play</p>
                           </div>
                         </a>
 
@@ -401,14 +411,14 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
                           href="https://www.apple.com/app-store/" 
                           target="_blank" 
                           rel="noopener noreferrer" 
-                          className="bg-black hover:bg-black/80 text-white px-5 py-2.5 rounded-xl border border-white/15 flex items-center gap-3 transition-all hover:scale-105"
+                          className="bg-black hover:bg-black/95 text-white px-5 py-2.5 rounded-xl border border-white/15 flex items-center gap-3 transition-all hover:scale-105 shadow-md hover:shadow-lg"
                         >
                           <svg className="w-5 h-5 text-white shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M18.71,19.5C17.88,20.74 17,21.95 15.66,22C14.32,22.05 13.89,21.24 12.37,21.24C10.84,21.24 10.37,21.97 9.1,22C7.79,22.05 6.8,20.68 5.96,19.47C4.25,17 2.94,12.45 4.7,9.39C5.57,7.87 7.13,6.91 8.82,6.88C10.1,6.86 11.32,7.75 12.11,7.75C12.89,7.75 14.37,6.68 15.92,6.84C16.57,6.87 18.39,7.1 19.56,8.82C19.47,8.88 17.39,10.1 17.41,12.63C17.44,15.65 20.06,16.66 20.1,16.67C20.08,16.74 19.67,18.11 18.71,19.5M15.97,4.17C16.63,3.37 17.07,2.28 16.95,1C16,1.04 14.9,1.6 14.24,2.38C13.68,3.04 13.19,4.14 13.34,5.39C14.39,5.47 15.4,4.88 15.97,4.17Z" />
+                            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.5-1.34.05-1.77-.76-3.29-.76-1.53 0-2 .73-3.27.78-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.44 1.44-1.38 2.82M15.97 4.17c.66-.81 1.1-1.9 1.98-3.18-1 .04-2.1.6-2.76 1.38-.56.66-1.05 1.76-.9 3.01 1.05.08 2.06-.51 2.63-1.21z" />
                           </svg>
                           <div className="text-left font-sans">
-                            <p className="text-[9px] uppercase text-gray-400 leading-none">Aplicativo para</p>
-                            <p className="text-xs font-bold leading-tight">iPhone (App Store)</p>
+                            <p className="text-[9px] uppercase text-gray-400 leading-none">Baixar na</p>
+                            <p className="text-xs font-bold leading-tight">App Store</p>
                           </div>
                         </a>
                       </div>
@@ -598,12 +608,17 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
       </main>
 
       {/* FOOTER component */}
-      <Footer 
-        onOpenPortal={() => setIsPortalOpen(true)} 
-        onNavigate={handleNavigate} 
-        onOpenSupabaseDiag={() => setIsSupabaseDiagOpen(true)}
-        onOpenAdminDashboard={() => setIsAdminDashboardOpen(true)}
-      />
+      {viewType !== 'dashboard' && (
+        <Footer 
+          onOpenPortal={() => setIsPortalOpen(true)} 
+          onNavigate={handleNavigate} 
+          onOpenSupabaseDiag={() => setIsSupabaseDiagOpen(true)}
+          onOpenAdminDashboard={() => {
+            setIsAdminDashboardOpen(true);
+            window.location.hash = '#dashboard';
+          }}
+        />
+      )}
 
       {/* PROPOSAL INQUIRY STEP FLOW MODAL */}
       <QuoteModal
@@ -645,85 +660,87 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
       )}
 
       {/* WHATSAPP CHAT POPUP SIMULATION BADGE */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
-        {isChatOpen && (
-          <div
-            id="chat-popup-widget"
-            className="bg-white rounded-3xl w-80 md:w-96 border border-[#cfdbec] shadow-2xl overflow-hidden flex flex-col mb-4 animate-fade-in"
-          >
-            {/* Popup Header banner */}
-            <div className="bg-[#2E7D32] p-4 text-white flex justify-between items-center">
-              <div className="flex gap-2 items-center">
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold">
-                  F
+      {viewType !== 'dashboard' && (
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
+          {isChatOpen && (
+            <div
+              id="chat-popup-widget"
+              className="bg-white rounded-3xl w-80 md:w-96 border border-[#cfdbec] shadow-2xl overflow-hidden flex flex-col mb-4 animate-fade-in"
+            >
+              {/* Popup Header banner */}
+              <div className="bg-[#2E7D32] p-4 text-white flex justify-between items-center">
+                <div className="flex gap-2 items-center">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold">
+                    F
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-xs font-display">Apoio Facilities</h4>
+                    <p className="text-[9px] text-green-150 font-semibold uppercase tracking-wider">● Online e Disponível</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-bold text-xs font-display">Apoio Facilities</h4>
-                  <p className="text-[9px] text-green-150 font-semibold uppercase tracking-wider">● Online e Disponível</p>
-                </div>
-              </div>
-              <button
-                id="chat-popup-close"
-                onClick={() => setIsChatOpen(false)}
-                className="text-white hover:text-gray-150 p-1 font-bold text-xs"
-              >
-                &times; Close
-              </button>
-            </div>
-
-            {/* Popup message logs inside scroll */}
-            <div className="p-4 h-64 overflow-y-auto space-y-3 bg-[#f5f7fa]">
-              {chatMessages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`max-w-[80%] rounded-2xl p-3 text-xs leading-relaxed font-sans ${
-                    msg.sender === 'agent'
-                      ? 'bg-white text-on-surface border border-[#cfdbec] rounded-tl-none self-start mr-auto'
-                      : 'bg-[#E2F0D9] text-on-surface border border-green-200 rounded-tr-none ml-auto text-right'
-                  }`}
+                <button
+                  id="chat-popup-close"
+                  onClick={() => setIsChatOpen(false)}
+                  className="text-white hover:text-gray-150 p-1 font-bold text-xs"
                 >
-                  {msg.text}
-                </div>
-              ))}
-            </div>
+                  &times; Close
+                </button>
+              </div>
 
-            {/* Quick action shortcuts to trigger responses */}
-            <div className="p-2 border-t border-gray-100 flex gap-2 overflow-x-auto bg-white shrink-0">
-              <button
-                id="chat-pref-quote"
-                onClick={() => handleSendMessage('Gostaria de cotar o orçamento do meu prédio!')}
-                className="bg-gray-50 border border-gray-200 text-secondary rounded-lg px-2.5 py-1 text-[10px] whitespace-nowrap font-semibold hover:border-primary active:scale-95"
-              >
-                Quero Orçamento
-              </button>
-              <button
-                id="chat-pref-delinq"
-                onClick={() => handleSendMessage('Como reduzir taxas atrasadas?')}
-                className="bg-gray-50 border border-gray-200 text-secondary rounded-lg px-2.5 py-1 text-[10px] whitespace-nowrap font-semibold hover:border-primary active:scale-95"
-              >
-                Inadimplência
-              </button>
-              <button
-                id="chat-pref-phone"
-                onClick={() => handleSendMessage('Qual o ramal para contato direto?')}
-                className="bg-gray-50 border border-gray-200 text-secondary rounded-lg px-2.5 py-1 text-[10px] whitespace-nowrap font-semibold hover:border-primary active:scale-95"
-              >
-                Telefone Útil
-              </button>
-            </div>
-          </div>
-        )}
+              {/* Popup message logs inside scroll */}
+              <div className="p-4 h-64 overflow-y-auto space-y-3 bg-[#f5f7fa]">
+                {chatMessages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`max-w-[80%] rounded-2xl p-3 text-xs leading-relaxed font-sans ${
+                      msg.sender === 'agent'
+                        ? 'bg-white text-on-surface border border-[#cfdbec] rounded-tl-none self-start mr-auto'
+                        : 'bg-[#E2F0D9] text-on-surface border border-green-200 rounded-tr-none ml-auto text-right'
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
+                ))}
+              </div>
 
-        {/* Large green floating ball button */}
-        <button
-          id="chat-floating-fab-btn"
-          onClick={() => setIsChatOpen(!isChatOpen)}
-          className="w-14 h-14 bg-[#2E7D32] hover:bg-green-700 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-90 transition-all cursor-pointer border border-green-500"
-          title="Falar Conosco"
-        >
-          {isChatOpen ? <X className="w-6 h-6 animate-spin" /> : <MessageCircle className="w-6 h-6 animate-pulse" />}
-        </button>
-      </div>
+              {/* Quick action shortcuts to trigger responses */}
+              <div className="p-2 border-t border-gray-100 flex gap-2 overflow-x-auto bg-white shrink-0">
+                <button
+                  id="chat-pref-quote"
+                  onClick={() => handleSendMessage('Gostaria de cotar o orçamento do meu prédio!')}
+                  className="bg-gray-50 border border-gray-200 text-secondary rounded-lg px-2.5 py-1 text-[10px] whitespace-nowrap font-semibold hover:border-primary active:scale-95"
+                >
+                  Quero Orçamento
+                </button>
+                <button
+                  id="chat-pref-delinq"
+                  onClick={() => handleSendMessage('Como reduzir taxas atrasadas?')}
+                  className="bg-gray-50 border border-gray-200 text-secondary rounded-lg px-2.5 py-1 text-[10px] whitespace-nowrap font-semibold hover:border-primary active:scale-95"
+                >
+                  Inadimplência
+                </button>
+                <button
+                  id="chat-pref-phone"
+                  onClick={() => handleSendMessage('Qual o ramal para contato direto?')}
+                  className="bg-gray-50 border border-gray-200 text-secondary rounded-lg px-2.5 py-1 text-[10px] whitespace-nowrap font-semibold hover:border-primary active:scale-95"
+                >
+                  Telefone Útil
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Large green floating ball button */}
+          <button
+            id="chat-floating-fab-btn"
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            className="w-14 h-14 bg-[#2E7D32] hover:bg-green-700 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-90 transition-all cursor-pointer border border-green-500"
+            title="Falar Conosco"
+          >
+            {isChatOpen ? <X className="w-6 h-6 animate-spin" /> : <MessageCircle className="w-6 h-6 animate-pulse" />}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
