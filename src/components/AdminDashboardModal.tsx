@@ -49,6 +49,12 @@ interface AdminDashboardModalProps {
 }
 
 // Data Interfaces
+interface RoleType {
+  id: string;
+  nome: string;
+  descricao: string;
+}
+
 interface UserProfile {
   id: string;
   auth_user_id?: string;
@@ -187,6 +193,13 @@ export default function AdminDashboardModal({
   const [newProfileTipo, setNewProfileTipo] = useState('morador');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
 
+  // Role Types Dynamic States & Forms definition
+  const [roleTypes, setRoleTypes] = useState<RoleType[]>([]);
+  const [newRoleTypeId, setNewRoleTypeId] = useState('');
+  const [newRoleTypeNome, setNewRoleTypeNome] = useState('');
+  const [newRoleTypeDescricao, setNewRoleTypeDescricao] = useState('');
+  const [selectedRoleTypeId, setSelectedRoleTypeId] = useState<string | null>(null);
+
   const [newVisitorNome, setNewVisitorNome] = useState('');
   const [newVisitorRg, setNewVisitorRg] = useState('');
   const [newVisitorUnidade, setNewVisitorUnidade] = useState('');
@@ -206,6 +219,35 @@ export default function AdminDashboardModal({
 
   // For Porteiro: locked out of Finance lists & reports completely.
   const isPorteiroRole = activeProfile === 'porteiro';
+
+  // Load and sync Role Types from Local Storage or defaults
+  useEffect(() => {
+    if (isOpen) {
+      const defaultRoleTypes: RoleType[] = [
+        { id: 'morador', nome: 'Morador', descricao: 'Apenas Consulta e Unidade' },
+        { id: 'proprietario', nome: 'Proprietário', descricao: 'Condômino Donatário' },
+        { id: 'sindico', nome: 'Síndico', descricao: 'Gestor Geral do Condomínio' },
+        { id: 'subsindico', nome: 'Subsíndico', descricao: 'Apoio Setorial de Gestão' },
+        { id: 'conselheiro', nome: 'Conselheiro', descricao: 'Fiscal e Auditor Read-Only' },
+        { id: 'porteiro', nome: 'Porteiro', descricao: 'Controle de Acesso de Portaria' },
+        { id: 'colaborador', nome: 'Colaborador', descricao: 'Prestador Interno' },
+        { id: 'administrador', nome: 'Administrador', descricao: 'Controle Total Master' }
+      ];
+
+      const saved = localStorage.getItem('supabase_sim_role_types');
+      if (saved) {
+        try {
+          setRoleTypes(JSON.parse(saved));
+        } catch (e) {
+          localStorage.setItem('supabase_sim_role_types', JSON.stringify(defaultRoleTypes));
+          setRoleTypes(defaultRoleTypes);
+        }
+      } else {
+        localStorage.setItem('supabase_sim_role_types', JSON.stringify(defaultRoleTypes));
+        setRoleTypes(defaultRoleTypes);
+      }
+    }
+  }, [isOpen]);
 
   // State synchronization with Supabase Tables
   useEffect(() => {
@@ -560,13 +602,18 @@ export default function AdminDashboardModal({
     // Determina o perfil legível correspondente ao tipo de role
     let resolvedPerfil = 'Morador';
     const cleanTipo = newProfileTipo.toLowerCase();
-    if (cleanTipo === 'administrador' || cleanTipo === 'admin') resolvedPerfil = 'Administrador';
-    else if (cleanTipo === 'colaborador' || cleanTipo === 'colab') resolvedPerfil = 'Colaborador';
-    else if (cleanTipo === 'sindico' || cleanTipo === 'síndico') resolvedPerfil = 'Síndico';
-    else if (cleanTipo === 'subsindico' || cleanTipo === 'subsíndico') resolvedPerfil = 'Subsíndico';
-    else if (cleanTipo === 'conselheiro') resolvedPerfil = 'Conselheiro';
-    else if (cleanTipo === 'proprietario' || cleanTipo === 'proprietário') resolvedPerfil = 'Proprietário';
-    else if (cleanTipo === 'porteiro') resolvedPerfil = 'Porteiro';
+    const foundRole = roleTypes.find(r => r.id === cleanTipo);
+    if (foundRole) {
+      resolvedPerfil = foundRole.nome;
+    } else {
+      if (cleanTipo === 'administrador' || cleanTipo === 'admin') resolvedPerfil = 'Administrador';
+      else if (cleanTipo === 'colaborador' || cleanTipo === 'colab') resolvedPerfil = 'Colaborador';
+      else if (cleanTipo === 'sindico' || cleanTipo === 'síndico') resolvedPerfil = 'Síndico';
+      else if (cleanTipo === 'subsindico' || cleanTipo === 'subsíndico') resolvedPerfil = 'Subsíndico';
+      else if (cleanTipo === 'conselheiro') resolvedPerfil = 'Conselheiro';
+      else if (cleanTipo === 'proprietario' || cleanTipo === 'proprietário') resolvedPerfil = 'Proprietário';
+      else if (cleanTipo === 'porteiro') resolvedPerfil = 'Porteiro';
+    }
 
     const cleanCpf = newProfileCpf.replace(/\D/g, '');
     const formattedCpf = cleanCpf.length === 11 
@@ -668,6 +715,85 @@ export default function AdminDashboardModal({
     }
 
     onShowMessage("Sucesso", "Perfil removido do sistema.");
+  };
+
+  const handleCreateOrUpdateRoleType = (e: FormEvent) => {
+    e.preventDefault();
+    if (activeProfile !== 'admin') {
+      onShowMessage("Bloqueio de Permissão", "Apenas o perfil Administrador pode adicionar ou editar tipos de role.");
+      return;
+    }
+
+    if (!newRoleTypeId.trim() || !newRoleTypeNome.trim()) {
+      onShowMessage("Campos Obrigatórios", "Por favor, defina um identificador (ID/Slug) e nome para o tipo de role.");
+      return;
+    }
+
+    const formattedId = newRoleTypeId.trim().toLowerCase().replace(/\s+/g, '-');
+
+    if (selectedRoleTypeId) {
+      // Editing
+      const updatedList = roleTypes.map(rt => 
+        rt.id === selectedRoleTypeId 
+          ? { ...rt, nome: newRoleTypeNome.trim(), descricao: newRoleTypeDescricao.trim() } 
+          : rt
+      );
+      setRoleTypes(updatedList);
+      localStorage.setItem('supabase_sim_role_types', JSON.stringify(updatedList));
+      addAuditLog('EDITAR', 'perfis', `Atualizado tipo de role: id=${selectedRoleTypeId}, nome=${newRoleTypeNome}`);
+      onShowMessage("Sucesso", `Tipo de role "${newRoleTypeNome}" atualizado.`);
+    } else {
+      // Creating
+      if (roleTypes.some(rt => rt.id === formattedId)) {
+        onShowMessage("ID Duplicado", "Já existe um tipo de role com este Identificador.");
+        return;
+      }
+
+      const newRole: RoleType = {
+        id: formattedId,
+        nome: newRoleTypeNome.trim(),
+        descricao: newRoleTypeDescricao.trim()
+      };
+
+      const updatedList = [...roleTypes, newRole];
+      setRoleTypes(updatedList);
+      localStorage.setItem('supabase_sim_role_types', JSON.stringify(updatedList));
+      addAuditLog('CRIAR', 'perfis', `Criado novo tipo de role: id=${formattedId}, nome=${newRoleTypeNome}`);
+      onShowMessage("Sucesso", `Tipo de role "${newRoleTypeNome}" criado com sucesso.`);
+    }
+
+    // Reset Form
+    setSelectedRoleTypeId(null);
+    setNewRoleTypeId('');
+    setNewRoleTypeNome('');
+    setNewRoleTypeDescricao('');
+  };
+
+  const handleDeleteRoleType = (id: string, nome: string) => {
+    if (activeProfile !== 'admin') {
+      onShowMessage("Bloqueio de Permissão", "Apenas o perfil Administrador pode excluir tipos de role.");
+      return;
+    }
+
+    if (id === 'administrador' || id === 'admin') {
+      onShowMessage("Ação Bloqueada", "Não é permitido remover a role Administrador básica do sistema.");
+      return;
+    }
+
+    const usersWithThisRole = profilesList.filter(p => p.tipo === id);
+    if (usersWithThisRole.length > 0) {
+      onShowMessage(
+        "Não é possível excluir",
+        `Existem ${usersWithThisRole.length} usuário(s) utilizando esta role. Por favor, altere o perfil desses usuários antes de remover o tipo de role.`
+      );
+      return;
+    }
+
+    const updatedList = roleTypes.filter(rt => rt.id !== id);
+    setRoleTypes(updatedList);
+    localStorage.setItem('supabase_sim_role_types', JSON.stringify(updatedList));
+    addAuditLog('EXCLUIR', 'perfis', `Excluído tipo de role: id=${id}, nome=${nome}`);
+    onShowMessage("Sucesso", `Tipo de role "${nome}" removido com sucesso.`);
   };
 
   const handleCreateVisitor = (e: FormEvent) => {
@@ -2071,14 +2197,11 @@ export default function AdminDashboardModal({
                               onChange={(e) => setNewProfileTipo(e.target.value)}
                               className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-bold text-[#101c29] cursor-pointer"
                             >
-                              <option value="morador">Morador (Apenas Consulta e Unidade)</option>
-                              <option value="proprietario">Proprietário (Condômino Donatário)</option>
-                              <option value="sindico">Síndico (Gestor Geral do Condomínio)</option>
-                              <option value="subsindico">Subsíndico (Apoio Setorial de Gestão)</option>
-                              <option value="conselheiro">Conselheiro (Fiscal e Auditor Read-Only)</option>
-                              <option value="porteiro">Porteiro (Controle de Acesso de Portaria)</option>
-                              <option value="colaborador">Colaborador (Prestador Interno)</option>
-                              <option value="administrador">Administrador (Controle Total Master)</option>
+                              {roleTypes.map(rt => (
+                                <option key={rt.id} value={rt.id}>
+                                  {rt.nome} ({rt.descricao})
+                                </option>
+                              ))}
                             </select>
                           </div>
                           <div className="flex gap-2">
@@ -2192,6 +2315,144 @@ export default function AdminDashboardModal({
                         </table>
                       </div>
                     </div>
+
+                    {/* SEÇÃO: GERENCIAMENTO DE TIPOS DE ROLE / PAPÉIS DE ACESSO */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      
+                      {/* Formulário de Tipos de Role (Apenas se for Admin) */}
+                      {activeProfile === 'admin' && (
+                        <div className="md:col-span-1 bg-white p-6 rounded-2xl border border-gray-150 shadow-sm space-y-4 h-fit text-left">
+                          <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 border-b border-gray-100 pb-2">
+                            <Plus className="w-4 h-4 text-emerald-500" /> {selectedRoleTypeId ? 'Editar Tipo de Role' : 'Criar Tipo de Role'}
+                          </h4>
+
+                          <form onSubmit={handleCreateOrUpdateRoleType} className="space-y-4">
+                            <div className="space-y-1 text-left">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase block">Chave / ID do Tipo *</label>
+                              <input
+                                type="text"
+                                required
+                                disabled={selectedRoleTypeId !== null}
+                                value={newRoleTypeId}
+                                onChange={(e) => setNewRoleTypeId(e.target.value)}
+                                placeholder="ex: gerente, sindico_apoio, etc"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29] disabled:opacity-60"
+                              />
+                            </div>
+
+                            <div className="space-y-1 text-left">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase block">Nome do Papel *</label>
+                              <input
+                                type="text"
+                                required
+                                value={newRoleTypeNome}
+                                onChange={(e) => setNewRoleTypeNome(e.target.value)}
+                                placeholder="ex: Síndico Corregulador, Morador Master"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                              />
+                            </div>
+
+                            <div className="space-y-1 text-left">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase block">Descrição de Permissões</label>
+                              <textarea
+                                value={newRoleTypeDescricao}
+                                onChange={(e) => setNewRoleTypeDescricao(e.target.value)}
+                                placeholder="ex: Gestão e fiscalização geral"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29] h-20 resize-none"
+                              />
+                            </div>
+
+                            <div className="flex gap-2">
+                              <button
+                                type="submit"
+                                className="flex-1 bg-[#101c29] hover:bg-black text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer text-center"
+                              >
+                                {selectedRoleTypeId ? 'Salvar Papel' : 'Criar Papel'}
+                              </button>
+                              {selectedRoleTypeId && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedRoleTypeId(null);
+                                    setNewRoleTypeId('');
+                                    setNewRoleTypeNome('');
+                                    setNewRoleTypeDescricao('');
+                                  }}
+                                  className="bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold px-3 py-2.5 text-xs rounded-lg transition-transform active:scale-95 cursor-pointer text-center"
+                                >
+                                  Cancelar
+                                </button>
+                              )}
+                            </div>
+                          </form>
+                        </div>
+                      )}
+
+                      {/* Lista e ações para Tipos de Role */}
+                      <div className={activeProfile === 'admin' ? "md:col-span-2 bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left space-y-4" : "col-span-3 bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left space-y-4"}>
+                        <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                          <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 font-display">
+                            <Key className="w-4 h-4 text-indigo-500" /> Tipos de Roles e Escopos Disponíveis
+                          </h4>
+                          <span className="text-[10px] text-gray-400 font-bold">
+                            Total: {roleTypes.length} Roles
+                          </span>
+                        </div>
+
+                        <div className="overflow-x-auto text-left">
+                          <table className="w-full text-xs text-left">
+                            <thead>
+                              <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase text-[9px]">
+                                <th className="py-2">Papel / Label</th>
+                                <th className="py-2">ID / Chave</th>
+                                <th className="py-2">Definição / Escopo</th>
+                                <th className="py-2 text-right">Ação</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {roleTypes.map(rt => (
+                                <tr key={rt.id} className="border-b border-gray-100 hover:bg-slate-50">
+                                  <td className="py-3 font-bold text-stone-850 flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" /> {rt.nome}
+                                  </td>
+                                  <td className="py-3 text-gray-600 font-mono text-[10px] tracking-tight text-neutral-500 select-all">{rt.id}</td>
+                                  <td className="py-3 text-[#101c29]/70 italic font-medium">{rt.descricao || 'Nenhuma descrição atribuída'}</td>
+                                  <td className="py-3 text-right">
+                                    {activeProfile === 'admin' ? (
+                                      <div className="flex justify-end gap-2.5">
+                                        <button
+                                          onClick={() => {
+                                            setSelectedRoleTypeId(rt.id);
+                                            setNewRoleTypeId(rt.id);
+                                            setNewRoleTypeNome(rt.nome);
+                                            setNewRoleTypeDescricao(rt.descricao || '');
+                                          }}
+                                          className="text-amber-650 hover:text-amber-800 font-bold hover:underline bg-transparent border-none cursor-pointer"
+                                        >
+                                          Editar
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteRoleType(rt.id, rt.nome)}
+                                          className="text-red-650 hover:text-red-800 font-bold hover:underline bg-transparent border-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                          disabled={rt.id === 'administrador' || rt.id === 'admin'}
+                                          title={rt.id === 'administrador' || rt.id === 'admin' ? "Role do Administrador principal é de sistema." : ""}
+                                        >
+                                          Remover
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span className="text-[9px] text-gray-400 italic">Read-Only</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                    </div>
+
                   </div>
                 )}
 
