@@ -1169,15 +1169,14 @@ export default function AdminDashboardModal({
           {/* LEFT DYNAMIC SIDEBAR MENU (Premium Dark Theme: #061426) */}
           <div className="w-full bg-[#061426] border-r border-white/5 flex flex-col overflow-y-auto shrink-0 select-none">
             
-            {/* Top Logo Area */}
-            <div className="p-6 pb-4 border-b border-white/5 flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#10B981] to-[#059669] text-white flex items-center justify-center shadow-lg shadow-emerald-500/10">
-                <Building2 className="w-5.5 h-5.5" />
-              </div>
-              <div className="text-left font-sans">
-                <span className="text-white text-[15px] font-black tracking-tight block leading-tight">Facilities</span>
-                <span className="text-[#10B981] text-[10px] font-extrabold uppercase tracking-widest block mt-0.5">Condominial</span>
-              </div>
+            {/* Top Logo Area with Custom Brand Logo */}
+            <div className="p-6 pb-4 border-b border-white/5 flex items-center justify-center">
+              <img 
+                src="https://ejpjtpteycckydrorjpr.supabase.co/storage/v1/object/public/images/facilities%20logobranco.png" 
+                alt="Facilities Condominial" 
+                className="w-full max-h-20 object-contain"
+                referrerPolicy="no-referrer"
+              />
             </div>
 
             {/* Menu Header Category */}
