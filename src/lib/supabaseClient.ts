@@ -167,6 +167,88 @@ export async function insertResilient(tableName: string, record: Record<string, 
   return { data: null, error: limitError };
 }
 
+// Resilient update helper - filters out missing columns on the fly if they don't exist in Supabase during update
+export async function updateResilient(tableName: string, id: string, record: Record<string, any>) {
+  console.log(`%c[Supabase UPDATE] 🚀 Iniciando fluxo de atualização na tabela '${tableName}' para ID ${id}...`, 'color: #3ecf8e; font-weight: bold; font-size: 14px; background-color: #101c29; padding: 4px 8px; border-radius: 4px;');
+  console.log(`[Supabase UPDATE] 📥 Dados originais enviados para alteração:`, JSON.stringify(record, null, 2));
+
+  if (!isSupabaseConfigured || !supabase) {
+    const backupError = new Error('Supabase de teste não está configurado. O sistema usará alteração local/simulada.');
+    console.warn('[Supabase UPDATE] ⚠️ Redirecionado para Simulação Local:', backupError.message);
+    return { data: null, error: backupError };
+  }
+
+  let currentRecord = { ...record };
+  // Never update the ID field
+  delete currentRecord.id;
+  
+  let attempts = 0;
+  const maxAttempts = 15;
+
+  while (attempts < maxAttempts) {
+    console.log(`[Supabase UPDATE] 🔄 Tentativa #${attempts + 1} de alteração na tabela '${tableName}'...`);
+    console.log(`[Supabase UPDATE] 📦 Payload de atualização enviado:`, JSON.stringify(currentRecord, null, 2));
+
+    const { data: dbData, error } = await supabase.from(tableName).update(currentRecord).eq('id', id).select();
+    
+    if (!error) {
+      console.log(`%c[Supabase UPDATE] ✅ SUCESSO! Alteração efetuada com êxito na tabela '${tableName}' para ID ${id}!`, 'color: #10b981; font-weight: bold; font-size: 13px;');
+      return { data: dbData || [currentRecord], error: null };
+    }
+
+    console.warn(`%c[Supabase UPDATE] ❌ FALHA na tentativa #${attempts + 1} para tabela '${tableName}':`, 'color: #f59e0b; font-weight: bold;');
+    console.warn(`[Supabase UPDATE] Código de Erro:`, error.code);
+    console.warn(`[Supabase UPDATE] Mensagem de Erro:`, error.message);
+    console.warn(`[Supabase UPDATE] Objeto do Erro Completo:`, error);
+
+    // PostgreSQL undefined_column code "42703" or PostgREST schema cache missing column error.
+    const isMissingColumnError = 
+      error.code === '42703' || 
+      (error.message && error.message.includes('column') && error.message.includes('does not exist')) ||
+      (error.message && error.message.includes('não existe')) ||
+      (error.message && error.message.includes('schema cache')) ||
+      (error.message && error.message.includes('Could not find') && error.message.includes('column'));
+
+    if (isMissingColumnError) {
+      const match = error.message.match(/column "([^"]+)"/i) || 
+                    error.message.match(/coluna "([^"]+)"/i) ||
+                    error.message.match(/Could not find the '([^']+)' column/i) ||
+                    error.message.match(/column '([^']+)'/i);
+      
+      if (match && match[1]) {
+        const missingColumn = match[1];
+        console.log(`%c[Supabase UPDATE] 🛠️ Autocorreção: Detectado que a coluna '${missingColumn}' não existe ou está ausente no cache. Removendo dos dados de atualização...`, 'color: #3b82f6; font-weight: bold;');
+        delete currentRecord[missingColumn];
+        attempts++;
+        continue;
+      } else {
+        let cleanedSome = false;
+        const knownFields = Object.keys(currentRecord);
+        for (const field of knownFields) {
+          if (error.message.toLowerCase().includes(field.toLowerCase())) {
+            console.log(`%c[Supabase UPDATE] 🛠️ Autocorreção Fallback: Encontrado termo '${field}' no erro. Removendo do envio...`, 'color: #3b82f6;');
+            delete currentRecord[field];
+            cleanedSome = true;
+          }
+        }
+        
+        if (cleanedSome) {
+          attempts++;
+          continue;
+        }
+      }
+    }
+    
+    console.error(`%c[Supabase UPDATE] 🛑 ERRO DEFINITIVO de alteração na tabela '${tableName}'! Fluxo interrompido devido a erro crítico:`, 'color: #ef4444; font-weight: bold; font-size: 13px;');
+    console.error(`[Supabase UPDATE] Mensagem final retornada pelo Supabase:`, error.message);
+    return { data: null, error };
+  }
+
+  const limitError = new Error('Resilient update limits exceeded.');
+  console.error('[Supabase UPDATE] 🛑 ERRO DEFINITIVO:', limitError.message);
+  return { data: null, error: limitError };
+}
+
 // SQL helper pattern for tables creation
 export const SQL_SETUP_SCRIPT = `-- EXECUTE ESTE SCRIPT NO EDITOR SQL DO SEU PAINEL SUPABASE:
 

@@ -26,11 +26,16 @@ import {
   ShieldAlert,
   Trash2,
   Edit2,
-  Plus
+  Plus,
+  Search,
+  Filter,
+  ArrowRight,
+  Eye
 } from 'lucide-react';
 import { Boleto, Booking, Assembly, Ticket } from '../types';
-import { supabase, isSupabaseConfigured, saveSimulatedData, getSimulatedData, insertResilient } from '../lib/supabaseClient';
+import { supabase, isSupabaseConfigured, saveSimulatedData, getSimulatedData, insertResilient, updateResilient } from '../lib/supabaseClient';
 import { usePortalRouter } from './PortalRouter';
+import CondoDetailsView from './CondoDetailsView';
 
 const generateUUID = (): string => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -62,6 +67,25 @@ const formatCEP = (value: string): string => {
   const limited = clean.slice(0, 8);
   if (limited.length <= 5) return limited;
   return `${limited.slice(0, 5)}-${limited.slice(5)}`;
+};
+
+const getCondoOverrides = (): Record<string, any> => {
+  try {
+    const saved = localStorage.getItem('condo_metadata_overrides');
+    return saved ? JSON.parse(saved) : {};
+  } catch (e) {
+    return {};
+  }
+};
+
+const saveCondoOverride = (id: string, data: any) => {
+  try {
+    const overrides = getCondoOverrides();
+    overrides[id] = { ...overrides[id], ...data };
+    localStorage.setItem('condo_metadata_overrides', JSON.stringify(overrides));
+  } catch (e) {
+    console.error('Error saving condo override:', e);
+  }
 };
 
 interface PortalModalProps {
@@ -159,7 +183,109 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   });
 
   // --- Administrative and Collaborator States ---
-  const [condos, setCondos] = useState<any[]>([]);
+  const [condos, setCondos] = useState<any[]>(() => {
+    const saved = localStorage.getItem('facilities_portal_condos');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.length > 0) {
+          const overrides = getCondoOverrides();
+          return parsed.map((c: any) => {
+            const over = overrides[c.id] || {};
+            return {
+              ...c,
+              sindico: over.sindico || c.sindico || 'Administradora Facilities',
+              unidades: Number(over.unidades ?? c.unidades ?? 80),
+              moradores: Number(over.moradores ?? c.moradores ?? 224),
+              proprietarios: Number(over.proprietarios ?? c.proprietarios ?? 76),
+              receita: Number(over.receita ?? c.receita ?? 60000),
+              despesa: Number(over.despesa ?? c.despesa ?? 49600),
+              inadimplenciaPercent: Number(over.inadimplenciaPercent ?? c.inadimplenciaPercent ?? c.inadimplencia_percent ?? 5.0),
+              status: over.status || c.status || 'Normal',
+              blocosCount: Number(over.blocosCount ?? c.blocosCount ?? 2)
+            };
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    // Default mock condos in Gonzaga/Santos
+    return [
+      {
+        id: 'cd-gonzaga',
+        nome: 'Condomínio Residencial Gonzaga Premium',
+        cnpj: '12.345.678/0001-90',
+        endereco: 'Av. Ana Costa, 540',
+        bairro: 'Gonzaga',
+        cidade: 'Santos',
+        estado: 'SP',
+        sindico: 'Dra. Cristhiane Xavier',
+        unidades: 120,
+        moradores: 336,
+        proprietarios: 114,
+        receita: 90000,
+        despesa: 72000,
+        inadimplenciaPercent: 4.5,
+        status: 'Normal',
+        blocosCount: 3
+      },
+      {
+        id: 'cd-pontadapraia',
+        nome: 'Residencial Costa Atlântica',
+        cnpj: '98.765.432/0001-21',
+        endereco: 'Av. Bartolomeu de Gusmão, 112',
+        bairro: 'Ponta da Praia',
+        cidade: 'Santos',
+        estado: 'SP',
+        sindico: 'Roberto Silva',
+        unidades: 80,
+        moradores: 224,
+        proprietarios: 76,
+        receita: 64000,
+        despesa: 54000,
+        inadimplenciaPercent: 12.0,
+        status: 'Alerta',
+        blocosCount: 2
+      },
+      {
+        id: 'cd-guaruja',
+        nome: 'Empresarial Enseada Corporate',
+        cnpj: '45.678.901/0001-33',
+        endereco: 'Av. Miguel Estéfno, 2400',
+        bairro: 'Enseada',
+        cidade: 'Guarujá',
+        estado: 'SP',
+        sindico: 'Administradora Facilities',
+        unidades: 150,
+        moradores: 420,
+        proprietarios: 140,
+        receita: 135000,
+        despesa: 112000,
+        inadimplenciaPercent: 2.1,
+        status: 'Normal',
+        blocosCount: 1
+      },
+      {
+        id: 'cd-miramar',
+        nome: 'Concept Miramar Living',
+        cnpj: '23.456.789/0001-44',
+        endereco: 'Rua Euclides da Cunha, 88',
+        bairro: 'Pompéia',
+        cidade: 'Santos',
+        estado: 'SP',
+        sindico: 'Lucas Ferreira',
+        unidades: 60,
+        moradores: 168,
+        proprietarios: 57,
+        receita: 48000,
+        despesa: 41000,
+        inadimplenciaPercent: 18.5,
+        status: 'Crítico',
+        blocosCount: 2
+      }
+    ];
+  });
   const [visitantes, setVisitantes] = useState<any[]>([]);
   const [encomendas, setEncomendas] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -177,6 +303,79 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [newCondoCep, setNewCondoCep] = useState('');
   const [isFetchingCep, setIsFetchingCep] = useState(false);
   const [cepError, setCepError] = useState('');
+
+  // Condo complete module features: filtration, view and edit states
+  const [condoSearchQuery, setCondoSearchQuery] = useState('');
+  const [condoStatusFilter, setCondoStatusFilter] = useState('Todos');
+  const [detailedCondo, setDetailedCondo] = useState<any | null>(null);
+  const [editingCondo, setEditingCondo] = useState<any | null>(null);
+
+  // Edit form model states
+  const [editCondoName, setEditCondoName] = useState('');
+  const [editCondoCnpj, setEditCondoCnpj] = useState('');
+  const [editCondoCep, setEditCondoCep] = useState('');
+  const [editCondoEndereco, setEditCondoEndereco] = useState('');
+  const [editCondoBairro, setEditCondoBairro] = useState('');
+  const [editCondoCidade, setEditCondoCidade] = useState('Santos');
+  const [editCondoEstado, setEditCondoEstado] = useState('SP');
+  const [editCondoSindico, setEditCondoSindico] = useState('');
+  const [editCondoBlocos, setEditCondoBlocos] = useState(2);
+  const [editCondoUnidades, setEditCondoUnidades] = useState(80);
+  const [editCondoMoradores, setEditCondoMoradores] = useState(224);
+  const [editCondoProprietarios, setEditCondoProprietarios] = useState(76);
+  const [editCondoReceita, setEditCondoReceita] = useState(60000);
+  const [editCondoDespesa, setEditCondoDespesa] = useState(49600);
+  const [editCondoInadimplencia, setEditCondoInadimplencia] = useState(5.0);
+  const [editCondoStatus, setEditCondoStatus] = useState('Normal');
+  const [isFetchingEditCep, setIsFetchingEditCep] = useState(false);
+  const [editCepError, setEditCepError] = useState('');
+
+  const handleEditCepChange = async (cepValue: string) => {
+    const formatted = formatCEP(cepValue);
+    setEditCondoCep(formatted);
+    const cleanCep = formatted.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      setIsFetchingEditCep(true);
+      setEditCepError('');
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+        const data = await res.json();
+        if (data.erro) {
+          setEditCepError('CEP inválido.');
+        } else {
+          setEditCondoEndereco(data.logradouro || '');
+          setEditCondoBairro(data.bairro || '');
+          if (data.localidade) setEditCondoCidade(data.localidade);
+          if (data.uf) setEditCondoEstado(data.uf);
+        }
+      } catch (error) {
+        setEditCepError('Erro ao consultar CEP.');
+      } finally {
+        setIsFetchingEditCep(false);
+      }
+    }
+  };
+
+  const startEditingCondo = (item: any) => {
+    setEditingCondo(item);
+    setEditCondoName(item.nome || '');
+    setEditCondoCnpj(item.cnpj || '');
+    setEditCondoCep(item.cep || item.cnpj?.substring(0, 5) || '');
+    setEditCondoEndereco(item.endereco || '');
+    setEditCondoBairro(item.bairro || '');
+    setEditCondoCidade(item.cidade || 'Santos');
+    setEditCondoEstado(item.estado || 'SP');
+    setEditCondoSindico(item.sindico || 'Administradora Facilities');
+    setEditCondoBlocos(Number(item.blocosCount || 2));
+    setEditCondoUnidades(Number(item.unidades || 80));
+    setEditCondoMoradores(Number(item.moradores || Math.round((Number(item.unidades) || 80) * 2.8)));
+    setEditCondoProprietarios(Number(item.proprietarios || Math.round((Number(item.unidades) || 80) * 0.95)));
+    setEditCondoReceita(Number(item.receita || 60000));
+    setEditCondoDespesa(Number(item.despesa || 49600));
+    setEditCondoInadimplencia(Number(item.inadimplenciaPercent || 5.0));
+    setEditCondoStatus(item.status || 'Normal');
+    setEditCepError('');
+  };
 
   const [newMoradorNome, setNewMoradorNome] = useState('');
 
@@ -486,28 +685,47 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
         }
 
         // 5. Fetch Condos
+        console.log('[Supabase FETCH] 🔍 Solicitando dados de condomínios da tabela "condominios"...');
         const { data: dbCondos, error: errCondos } = await supabase.from('condominios').select('*');
+        if (errCondos) {
+          console.error('[Supabase FETCH] ❌ Erro ao consultar condomínios:', errCondos.message, errCondos);
+        }
         if (dbCondos && !errCondos) {
-          const mappedCondos = dbCondos.map((c: any) => ({
-            id: c.id,
-            nome: c.nome,
-            cnpj: c.cnpj || '',
-            endereco: c.endereco || '',
-            bairro: c.bairro || '',
-            cidade: c.cidade || '',
-            estado: c.estado || '',
-            sindico: c.sindico || 'Administradora Facilities',
-            unidades: Number(c.unidades || 80),
-            moradores: Number(c.moradores || 224),
-            proprietarios: Number(c.proprietarios || 76),
-            receita: Number(c.receita || 60000),
-            despesa: Number(c.despesa || 49600),
-            inadimplenciaPercent: Number(c.inadimplencia_percent || 5.0),
-            status: c.status || 'Normal'
-          }));
+          console.log(`[Supabase FETCH] ✅ SUCESSO! Encontrado(s) ${dbCondos.length} registro(s) no Supabase.`);
+          const overrides = getCondoOverrides();
+          const mappedCondos = dbCondos.map((c: any) => {
+            const over = overrides[c.id] || {};
+            return {
+              id: c.id,
+              nome: c.nome,
+              cnpj: c.cnpj || '',
+              endereco: c.endereco || '',
+              bairro: c.bairro || '',
+              cidade: c.cidade || '',
+              estado: c.estado || '',
+              sindico: over.sindico || c.sindico || 'Administradora Facilities',
+              unidades: Number(over.unidades ?? c.unidades ?? 80),
+              moradores: Number(over.moradores ?? c.moradores ?? 224),
+              proprietarios: Number(over.proprietarios ?? c.proprietarios ?? 76),
+              receita: Number(over.receita ?? c.receita ?? 60000),
+              despesa: Number(over.despesa ?? c.despesa ?? 49600),
+              inadimplenciaPercent: Number(over.inadimplenciaPercent ?? c.inadimplencia_percent ?? 5.0),
+              status: over.status || c.status || 'Normal',
+              blocosCount: Number(over.blocosCount ?? c.blocosCount ?? 2)
+            };
+          });
           setCondos(mappedCondos);
         } else {
-          setCondos([]);
+          console.warn('[Supabase FETCH] ⚠️ Usando base de dados local salva (offline-first).');
+          const savedLocal = localStorage.getItem('facilities_portal_condos');
+          if (savedLocal) {
+            try {
+              const parsed = JSON.parse(savedLocal);
+              if (parsed && parsed.length > 0) {
+                setCondos(parsed);
+              }
+            } catch (err) {}
+          }
         }
 
         // 6. Fetch Visitantes
@@ -851,6 +1069,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
     } else if (prof.includes('sindico') || prof.includes('síndico')) {
       return [
         { id: 'admin_dashboard', label: 'Faturamento & Visão', icon: <Compass className="w-4 h-4" /> },
+        { id: 'admin_condominios', label: 'Meu Condomínio', icon: <Building2 className="w-4 h-4" /> },
         { id: 'admin_financeiro', label: 'Prestação de Contas', icon: <Wallet className="w-4 h-4" /> },
         { id: 'admin_portaria', label: 'Controle Portaria', icon: <Key className="w-4 h-4" /> },
       ];
@@ -1868,10 +2087,18 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                         <p className="text-xs text-secondary italic">Nenhum condomínio cadastrado ou vinculado.</p>
                       ) : (
                         getFilteredCondos().map(c => (
-                          <div key={c.id} className="space-y-1">
+                          <div 
+                            key={c.id} 
+                            onClick={() => {
+                              setDetailedCondo(c);
+                              setActiveTab('admin_condominios');
+                            }}
+                            className="space-y-1 cursor-pointer hover:bg-stone-50/70 p-2 rounded-xl transition-all"
+                            title="Clique de forma interativa para ver os detalhes completos deste condomínio"
+                          >
                             <div className="flex justify-between text-xs font-bold text-secondary">
-                              <span>{c.nome}</span>
-                              <span className={c.inadimplenciaPercent > 15 ? 'text-[#af101a] font-bold' : 'text-[#101c29]'}>{c.inadimplenciaPercent}% inadimplência</span>
+                              <span className="hover:text-primary transition-colors">{c.nome}</span>
+                              <span className={c.inadimplenciaPercent > 15 ? 'text-[#af101a]' : 'text-[#101c29]'}>{c.inadimplenciaPercent}% inadimplência</span>
                             </div>
                             <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
                               <div className={`h-full rounded-full ${
@@ -1901,7 +2128,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                         <h5 className="text-xl font-bold text-red-700 font-display leading-none mt-1">
                           R$ {getFilteredCondos().reduce((acc, c) => acc + c.despesa, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </h5>
-                        <p className="text-[10px] text-secondary mt-1.5">Soma de salários, zeladoria e concessionárias</p>
+                        <p className="text-[10px] text-secondary mt-1.5">Soma estimada de despesas mensais</p>
                       </div>
                     </div>
                   </div>
@@ -1909,333 +2136,865 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
               )}
 
               {/* ADMIN TAB: GESTÃO DE CONDOMÍNIOS */}
-              {activeTab === 'admin_condominios' && (
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center text-left">
-                    <div>
-                      <h4 className="text-base font-bold text-[#101c29] font-display">Residenciais e Condomínios Integrados</h4>
-                      <p className="text-xs text-secondary mt-0.5">Gerenciador de complexos habitacionais e empresariais parceiros Facilities.</p>
+              {activeTab === 'admin_condominios' && (() => {
+                // Relationship check and deletion handler
+                const handleDeleteCondo = (item: any) => {
+                  const activeBookings = bookings.filter((b: any) => b.status === 'Confirmado' || b.status === 'Pendente').length;
+                  const openTickets = ocorrencias.filter((t: any) => t.status === 'Aberto' || t.status === 'Em Andamento').length;
+                  
+                  let relationshipWarning = '';
+                  if (activeBookings > 0 || openTickets > 0) {
+                    relationshipWarning = `\n\nATENÇÃO DE RELACIONAMENTO: Existem ${activeBookings} reservas ativas e ${openTickets} chamados de manutenção em aberto associados na base. A exclusão afetará as dependências lógicas.`;
+                  }
+
+                  const confirmMsg = `Confirmar exclusão dº condomínio "${item.nome}"?\nCNPJ: ${item.cnpj}\n\nTodas as unidades vinculadas (${item.unidades} aptos) serão excluídas.${relationshipWarning}\n\nDeseja remover este registro do Supabase de forma permanente?`;
+
+                  if (confirm(confirmMsg)) {
+                    console.log(`[Supabase DELETE] 🚀 Deletando condomínio no Supabase ID: ${item.id} - ${item.nome}...`);
+                    setCondos(prev => prev.filter(c => c.id !== item.id));
+
+                    if (isSupabaseConfigured && supabase) {
+                      supabase.from('condominios').delete().eq('id', item.id).then(({ error }) => {
+                        if (error) {
+                          console.error('[Supabase DELETE] 🛑 Falha na exclusão do condomínio do Supabase:', error.message, error);
+                          onShowNotification('Erro de Banco', `Não foi possível deletar no servidor: ${error.message}`);
+                        } else {
+                          console.log('[Supabase DELETE] ✅ Excluído de forma integrada no Supabase.');
+                        }
+                      });
+                    }
+
+                    addAuditLog('EXCLUIR', 'condominios', `Excluído condomínio ${item.nome} da base geral.`);
+                    onShowNotification('Sucesso!', `Condomínio ${item.nome} removido.`);
+                    if (detailedCondo && detailedCondo.id === item.id) {
+                      setDetailedCondo(null);
+                    }
+                  }
+                };
+
+                // Save edited condo logic
+                const handleSaveEditCondo = async (e: FormEvent) => {
+                  e.preventDefault();
+                  if (!editCondoName.trim()) {
+                    onShowNotification('Nome Obrigatório', 'Por favor, defina um nome para o condomínio.');
+                    return;
+                  }
+                  const sanitizedCnpj = editCondoCnpj.replace(/\D/g, '');
+                  if (!sanitizedCnpj) {
+                    onShowNotification('CNPJ inválido', 'Por favor, informe o CNPJ do condomínio.');
+                    return;
+                  }
+
+                  const updatedObj = {
+                    ...editingCondo,
+                    nome: editCondoName,
+                    cnpj: editCondoCnpj,
+                    cep: editCondoCep,
+                    endereco: editCondoEndereco,
+                    bairro: editCondoBairro,
+                    cidade: editCondoCidade,
+                    estado: editCondoEstado,
+                    sindico: editCondoSindico || 'Administradora Facilities',
+                    unidades: Number(editCondoUnidades) || 80,
+                    blocosCount: Number(editCondoBlocos) || 2,
+                    moradores: Number(editCondoMoradores) || 224,
+                    proprietarios: Number(editCondoProprietarios) || 76,
+                    receita: Number(editCondoReceita) || 60000,
+                    despesa: Number(editCondoDespesa) || 49600,
+                    inadimplenciaPercent: Number(editCondoInadimplencia) || 5.2,
+                    status: editCondoStatus
+                  };
+
+                  console.log(`[Supabase UPDATE] 🚀 Salvando alterações para o ID: ${updatedObj.id}`);
+
+                  // Cache metadata overrides locally (guarantees properties matching regardless of structural columns)
+                  saveCondoOverride(updatedObj.id, {
+                    sindico: updatedObj.sindico,
+                    unidades: updatedObj.unidades,
+                    blocosCount: updatedObj.blocosCount,
+                    moradores: updatedObj.moradores,
+                    proprietarios: updatedObj.proprietarios,
+                    receita: updatedObj.receita,
+                    despesa: updatedObj.despesa,
+                    inadimplenciaPercent: updatedObj.inadimplenciaPercent,
+                    status: updatedObj.status
+                  });
+
+                  if (isSupabaseConfigured && supabase) {
+                    const { error } = await updateResilient('condominios', updatedObj.id, {
+                      nome: updatedObj.nome,
+                      cnpj: updatedObj.cnpj,
+                      endereco: updatedObj.endereco,
+                      bairro: updatedObj.bairro,
+                      cidade: updatedObj.cidade,
+                      estado: updatedObj.estado,
+                      cep: updatedObj.cep,
+                      // if columns exist, they'll match, otherwise autocorrect handles it cleanly:
+                      sindico: updatedObj.sindico,
+                      unidades: updatedObj.unidades,
+                      moradores: updatedObj.moradores,
+                      receita: updatedObj.receita,
+                      despesa: updatedObj.despesa,
+                      inadimplencia_percent: updatedObj.inadimplenciaPercent,
+                      status: updatedObj.status
+                    });
+
+                    if (error) {
+                      console.error('[Supabase UPDATE] 🛑 Erro ao atualizar condomínio no banco de dados:', error.message);
+                      onShowNotification('Erro Supabase', `Não foi possível persistir no cloud: ${error.message || 'Sem conexão'}`);
+                    } else {
+                      console.log('[Supabase UPDATE] ✅ Atualização executada com sucesso no Supabase.');
+                    }
+                  }
+
+                  setCondos(prev => prev.map(c => c.id === updatedObj.id ? updatedObj : c));
+                  addAuditLog('EDITAR', 'condominios', `Atualizou dados dº condomínio ${updatedObj.nome}.`);
+                  onShowNotification('Sucesso!', `Condomínio ${updatedObj.nome} atualizado.`);
+                  
+                  setEditingCondo(null);
+                  if (detailedCondo && detailedCondo.id === updatedObj.id) {
+                    setDetailedCondo(updatedObj);
+                  }
+                };
+
+                // Filter condominiums list in real-world input stream
+                const currentFilteredCondos = getFilteredCondos().filter((c: any) => {
+                  const query = condoSearchQuery.toLowerCase().trim();
+                  const matchesSearch = !query || 
+                    c.nome.toLowerCase().includes(query) || 
+                    (c.cnpj && c.cnpj.includes(query)) ||
+                    (c.endereco && c.endereco.toLowerCase().includes(query)) ||
+                    (c.cidade && c.cidade.toLowerCase().includes(query));
+                  const matchesStatus = condoStatusFilter === 'Todos' || c.status === condoStatusFilter;
+                  return matchesSearch && matchesStatus;
+                });
+
+                if (detailedCondo) {
+                  return (
+                    <CondoDetailsView
+                      condo={detailedCondo}
+                      onBack={() => setDetailedCondo(null)}
+                      onEdit={(item) => {
+                        startEditingCondo(item);
+                      }}
+                      onDelete={(item) => {
+                        handleDeleteCondo(item);
+                      }}
+                      onShowNotification={onShowNotification}
+                    />
+                  );
+                }
+
+                return (
+                  <div className="space-y-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-left gap-4">
+                      <div>
+                        <h4 className="text-base font-bold text-[#101c29] font-display">Residenciais e Condomínios Integrados</h4>
+                        <p className="text-xs text-secondary mt-0.5">Gerenciador de complexos habitacionais e empresariais parceiros Facilities.</p>
+                      </div>
+                      <button
+                        onClick={() => setShowCondoForm(true)}
+                        className="bg-primary hover:bg-[#af101a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Cadastrar Condomínio
+                      </button>
                     </div>
-                    <button
-                      onClick={() => setShowCondoForm(true)}
-                      className="bg-primary hover:bg-[#af101a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Cadastrar Condomínio
-                    </button>
-                  </div>
 
-                  {/* Condo creation modal */}
-                  {showCondoForm && (
-                    <div id="modal-cadastro-condo-portal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-fade-in">
-                      <div className="bg-white w-full max-w-xl rounded-[28px] shadow-[0_24px_60px_-15px_rgba(0,0,0,0.35)] border border-gray-100 overflow-hidden flex flex-col max-h-[90vh]">
-                        {/* Modal Header */}
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                          <h4 className="text-xs font-extrabold text-[#101c29] uppercase tracking-wider flex items-center gap-2">
-                            <Plus className="w-4 h-4 text-[#af101a]" /> Novo Condomínio
-                          </h4>
-                          <button
-                            onClick={() => setShowCondoForm(false)}
-                            className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full transition-colors cursor-pointer border-0 bg-transparent"
+                    {/* Integrated Search & Filter Row */}
+                    <div className="flex flex-col sm:flex-row gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-150 text-left">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                        <input
+                          type="text"
+                          placeholder="Pesquisar por nome, CNPJ, endereço ou cidade..."
+                          value={condoSearchQuery}
+                          onChange={(e) => setCondoSearchQuery(e.target.value)}
+                          className="w-full pl-9.5 pr-3 py-2.5 bg-white border border-gray-250 rounded-xl text-xs outline-none focus:border-primary text-[#101c29]"
+                        />
+                        {condoSearchQuery && (
+                          <button 
+                            onClick={() => setCondoSearchQuery('')}
+                            className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 bg-transparent border-0 cursor-pointer text-xs"
                           >
-                            <X className="w-5 h-5" />
+                            Limpar
                           </button>
-                        </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-gray-400" />
+                        <span className="text-xs text-secondary hidden md:inline">Status:</span>
+                        <select
+                          value={condoStatusFilter}
+                          onChange={(e) => setCondoStatusFilter(e.target.value)}
+                          className="bg-white border border-gray-250 px-3 py-2.5 rounded-xl text-xs outline-none text-[#101c29] cursor-pointer"
+                        >
+                          <option value="Todos">Todos os Status</option>
+                          <option value="Normal">Normal</option>
+                          <option value="Alerta">Alerta</option>
+                          <option value="Crítico">Crítico</option>
+                        </select>
+                      </div>
+                    </div>
 
-                        {/* Modal Body */}
-                        <div className="p-6 overflow-y-auto space-y-4 text-left">
-                          <form onSubmit={(e) => {
-                            e.preventDefault();
-                            
-                            const nameTrimmed = newCondoName.trim();
-                            if (!nameTrimmed) {
-                              onShowNotification('Erro de Validação', 'Por favor, informe o Nome do Condomínio.');
-                              return;
-                            }
-                            
-                            const cnpjCleaned = newCondoCnpj.replace(/\D/g, '');
-                            if (!cnpjCleaned) {
-                              onShowNotification('Erro de Validação', 'Por favor, informe o CNPJ do Condomínio.');
-                              return;
-                            }
-                            if (cnpjCleaned.length !== 14) {
-                              onShowNotification('CNPJ Inválido', 'O CNPJ deve conter exatamente 14 números.');
-                              return;
-                            }
+                    {/* Condo creation modal */}
+                    {showCondoForm && (
+                      <div id="modal-cadastro-condo-portal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-fade-in">
+                        <div className="bg-white w-full max-w-xl rounded-[28px] shadow-[0_24px_60px_-15px_rgba(0,0,0,0.35)] border border-gray-100 overflow-hidden flex flex-col max-h-[90vh]">
+                          {/* Modal Header */}
+                          <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <h4 className="text-xs font-extrabold text-[#101c29] uppercase tracking-wider flex items-center gap-2">
+                              <Plus className="w-4 h-4 text-[#af101a]" /> Novo Condomínio
+                            </h4>
+                            <button
+                              onClick={() => setShowCondoForm(false)}
+                              className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full transition-colors cursor-pointer border-0 bg-transparent"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
 
-                            const cepCleaned = newCondoCep.replace(/\D/g, '');
-                            if (!cepCleaned) {
-                              onShowNotification('Erro de Validação', 'Por favor, informe o CEP do Condomínio.');
-                              return;
-                            }
-                            if (cepCleaned.length !== 8) {
-                              onShowNotification('CEP Inválido', 'O CEP deve conter exatamente 8 números (exemplo: 11000-000).');
-                              return;
-                            }
+                          {/* Modal Body */}
+                          <div className="p-6 overflow-y-auto space-y-4 text-left">
+                            <form onSubmit={(e) => {
+                              e.preventDefault();
+                              
+                              const nameTrimmed = newCondoName.trim();
+                              if (!nameTrimmed) {
+                                onShowNotification('Erro de Validação', 'Por favor, informe o Nome do Condomínio.');
+                                return;
+                              }
+                              
+                              const cnpjCleaned = newCondoCnpj.replace(/\D/g, '');
+                              if (!cnpjCleaned) {
+                                onShowNotification('Erro de Validação', 'Por favor, informe o CNPJ do Condomínio.');
+                                return;
+                              }
+                              if (cnpjCleaned.length !== 14) {
+                                onShowNotification('CNPJ Inválido', 'O CNPJ deve conter exatamente 14 números.');
+                                return;
+                              }
 
-                            const newId = generateUUID();
-                            const newObj = {
-                              id: newId,
-                              nome: newCondoName,
-                              cnpj: newCondoCnpj,
-                              endereco: newCondoEndereco || ('Av. Ana Costa, 142'),
-                              bairro: newCondoBairro || 'Gonzaga',
-                              cidade: newCondoCidade || 'Santos',
-                              estado: newCondoEstado || 'SP',
-                              sindico: newCondoSindico || 'Administradora Facilities',
-                              unidades: Number(newCondoUnidades) || 80,
-                              moradores: Math.round(Number(newCondoUnidades || 80) * 2.8),
-                              proprietarios: Math.round(Number(newCondoUnidades || 80) * 0.95),
-                              receita: Number(newCondoUnidades || 80) * 750,
-                              despesa: Number(newCondoUnidades || 80) * 620,
-                              inadimplenciaPercent: 5.0,
-                              status: 'Normal'
-                            };
-                            const saveAndClose = async () => {
-                              if (isSupabaseConfigured && supabase) {
-                                const { error } = await insertResilient('condominios', {
-                                  id: newObj.id,
-                                  nome: newObj.nome,
-                                  cnpj: newObj.cnpj,
-                                  endereco: newObj.endereco,
-                                  bairro: newObj.bairro,
-                                  cidade: newObj.cidade,
-                                  estado: newObj.estado,
+                              const cepCleaned = newCondoCep.replace(/\D/g, '');
+                              if (!cepCleaned) {
+                                onShowNotification('Erro de Validação', 'Por favor, informe o CEP do Condomínio.');
+                                return;
+                              }
+                              if (cepCleaned.length !== 8) {
+                                onShowNotification('CEP Inválido', 'O CEP deve conter exatamente 8 números.');
+                                return;
+                              }
+
+                              const newId = generateUUID();
+                              const newObj = {
+                                id: newId,
+                                nome: newCondoName,
+                                cnpj: newCondoCnpj,
+                                cep: newCondoCep,
+                                endereco: newCondoEndereco || 'Av. Ana Costa, 142',
+                                bairro: newCondoBairro || 'Gonzaga',
+                                cidade: newCondoCidade || 'Santos',
+                                estado: newCondoEstado || 'SP',
+                                sindico: newCondoSindico || 'Administradora Facilities',
+                                unidades: Number(newCondoUnidades) || 80,
+                                moradores: Math.round(Number(newCondoUnidades || 80) * 2.8),
+                                proprietarios: Math.round(Number(newCondoUnidades || 80) * 0.95),
+                                receita: Number(newCondoUnidades || 80) * 750,
+                                despesa: Number(newCondoUnidades || 80) * 620,
+                                inadimplenciaPercent: 5.0,
+                                status: 'Normal',
+                                blocosCount: 2
+                              };
+
+                              const saveAndClose = async () => {
+                                if (isSupabaseConfigured && supabase) {
+                                  const { error } = await insertResilient('condominios', {
+                                    id: newObj.id,
+                                    nome: newObj.nome,
+                                    cnpj: newObj.cnpj,
+                                    cep: newObj.cep,
+                                    endereco: newObj.endereco,
+                                    bairro: newObj.bairro,
+                                    cidade: newObj.cidade,
+                                    estado: newObj.estado,
+                                    sindico: newObj.sindico,
+                                    unidades: newObj.unidades,
+                                    moradores: newObj.moradores,
+                                    proprietarios: newObj.proprietarios,
+                                    receita: newObj.receita,
+                                    despesa: newObj.despesa,
+                                    inadimplencia_percent: newObj.inadimplenciaPercent,
+                                    status: newObj.status
+                                  });
+
+                                  if (error) {
+                                    console.error('[Supabase INSERT] 🛑 Erro ao salvar condomínio:', error.message);
+                                    onShowNotification('Erro de Conexão', `Não foi possível registrar no banco: ${error.message}`);
+                                    return;
+                                  }
+                                } else {
+                                  saveSimulatedData('condominios', newObj);
+                                }
+
+                                saveCondoOverride(newObj.id, {
                                   sindico: newObj.sindico,
                                   unidades: newObj.unidades,
+                                  blocosCount: 2,
                                   moradores: newObj.moradores,
                                   proprietarios: newObj.proprietarios,
                                   receita: newObj.receita,
                                   despesa: newObj.despesa,
-                                  inadimplencia_percent: newObj.inadimplenciaPercent,
+                                  inadimplenciaPercent: newObj.inadimplenciaPercent,
                                   status: newObj.status
                                 });
 
-                                if (error) {
-                                  console.error('Erro ao salvar condomínio no Supabase:', error.message);
-                                  onShowNotification('Erro de Salvamento', `Não foi possível persistir o condomínio: ${error.message || 'Sem conexão com banco'}`);
-                                  return;
-                                }
-                              } else {
-                                saveSimulatedData('condominios', newObj);
-                              }
+                                setCondos(prev => [...prev, newObj]);
+                                addAuditLog('CRIAR', 'condominios', `Registrado condomínio ${newCondoName} com ${newCondoUnidades} unidades.`);
+                                onShowNotification('Sucesso!', `Condomínio ${newCondoName} cadastrado com sucesso.`);
+                                setNewCondoName('');
+                                setNewCondoCnpj('');
+                                setNewCondoSindico('');
+                                setNewCondoCidade('Santos');
+                                setNewCondoEstado('SP');
+                                setNewCondoEndereco('');
+                                setNewCondoBairro('');
+                                setNewCondoCep('');
+                                setCepError('');
+                                setIsFetchingCep(false);
+                                setShowCondoForm(false);
+                              };
 
-                              setCondos(prev => [...prev, newObj]);
-                              addAuditLog('CRIAR', 'condominios', `Registrado condomínio ${newCondoName} com ${newCondoUnidades} unidades.`);
-                              onShowNotification('Sucesso!', `Condomínio ${newCondoName} foi adicionados com sucesso.`);
-                              setNewCondoName('');
-                              setNewCondoCnpj('');
-                              setNewCondoSindico('');
-                              setNewCondoCidade('Santos');
-                              setNewCondoEstado('SP');
-                              setNewCondoEndereco('');
-                              setNewCondoBairro('');
-                              setNewCondoCep('');
-                              setCepError('');
-                              setIsFetchingCep(false);
-                              setShowCondoForm(false);
-                            };
+                              saveAndClose();
+                            }} className="space-y-4">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-1 md:col-span-2">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Nome do Condomínio *</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Residencial Miramar"
+                                    value={newCondoName}
+                                    onChange={(e) => setNewCondoName(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
 
-                            saveAndClose();
-                          }} className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <div className="space-y-1 md:col-span-2">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Nome do Condomínio *</label>
-                                <input
-                                  type="text"
-                                  placeholder="Residencial Miramar"
-                                  value={newCondoName}
-                                  onChange={(e) => setNewCondoName(e.target.value)}
-                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                                />
+                                <div className="space-y-1 md:col-span-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ *</label>
+                                  <input
+                                    type="text"
+                                    placeholder="00.000.000/0001-00"
+                                    value={newCondoCnpj}
+                                    onChange={(e) => setNewCondoCnpj(formatCNPJ(e.target.value))}
+                                    maxLength={18}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
+                                  />
+                                </div>
                               </div>
 
-                              <div className="space-y-1 md:col-span-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ *</label>
-                                <input
-                                  type="text"
-                                  placeholder="00.000.000/0001-00"
-                                  value={newCondoCnpj}
-                                  onChange={(e) => setNewCondoCnpj(formatCNPJ(e.target.value))}
-                                  maxLength={18}
-                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
-                                />
-                              </div>
-                            </div>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-1 md:col-span-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between items-center">
+                                    <span>CEP *</span>
+                                    {isFetchingCep && <span className="text-[9px] text-blue-500 animate-pulse font-medium">Buscando...</span>}
+                                    {cepError && <span className="text-[9px] text-[#af101a] font-medium">{cepError}</span>}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    maxLength={9}
+                                    placeholder="00000-000"
+                                    value={newCondoCep}
+                                    onChange={(e) => handleCepChange(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
+                                  />
+                                </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <div className="space-y-1 md:col-span-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between items-center">
-                                  <span>CEP *</span>
-                                  {isFetchingCep && <span className="text-[9px] text-blue-500 animate-pulse font-medium">Buscando endereço...</span>}
-                                  {cepError && <span className="text-[9px] text-[#af101a] font-medium">{cepError}</span>}
-                                </label>
-                                <input
-                                  type="text"
-                                  maxLength={9}
-                                  placeholder="00000-000"
-                                  value={newCondoCep}
-                                  onChange={(e) => handleCepChange(e.target.value)}
-                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
-                                />
-                              </div>
-
-                              <div className="space-y-1 md:col-span-2">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço</label>
-                                <input
-                                  type="text"
-                                  placeholder="Ex: Av. Ana Costa, 142"
-                                  value={newCondoEndereco}
-                                  onChange={(e) => setNewCondoEndereco(e.target.value)}
-                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                              <div className="space-y-1 col-span-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro</label>
-                                <input
-                                  type="text"
-                                  placeholder="Ex: Gonzaga"
-                                  value={newCondoBairro}
-                                  onChange={(e) => setNewCondoBairro(e.target.value)}
-                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                                />
+                                <div className="space-y-1 md:col-span-2">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Ex: Av. Ana Costa, 142"
+                                    value={newCondoEndereco}
+                                    onChange={(e) => setNewCondoEndereco(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
                               </div>
 
-                              <div className="space-y-1 col-span-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade</label>
-                                <select
-                                  value={newCondoCidade}
-                                  onChange={(e) => setNewCondoCidade(e.target.value)}
-                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="space-y-1 col-span-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Ex: Gonzaga"
+                                    value={newCondoBairro}
+                                    onChange={(e) => setNewCondoBairro(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1 col-span-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade</label>
+                                  <select
+                                    value={newCondoCidade}
+                                    onChange={(e) => setNewCondoCidade(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
+                                  >
+                                    <option value="">Selecione...</option>
+                                    <option value="Santos">Santos</option>
+                                    <option value="São Vicente">São Vicente</option>
+                                    <option value="Praia Grande">Praia Grande</option>
+                                    <option value="Guarujá">Guarujá</option>
+                                    {newCondoCidade && !["Santos", "São Vicente", "Praia Grande", "Guarujá"].includes(newCondoCidade) && (
+                                      <option value={newCondoCidade}>{newCondoCidade}</option>
+                                    )}
+                                  </select>
+                                </div>
+
+                                <div className="space-y-1 col-span-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
+                                  <select
+                                    value={newCondoEstado}
+                                    onChange={(e) => setNewCondoEstado(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
+                                  >
+                                    <option value="SP">São Paulo (SP)</option>
+                                    {newCondoEstado && newCondoEstado !== 'SP' && (
+                                      <option value={newCondoEstado}>{newCondoEstado}</option>
+                                    )}
+                                  </select>
+                                </div>
+
+                                <div className="space-y-1 col-span-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades</label>
+                                  <input
+                                    type="number"
+                                    placeholder="80"
+                                    value={newCondoUnidades || ''}
+                                    onChange={(e) => setNewCondoUnidades(Number(e.target.value))}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCondoForm(false)}
+                                  className="px-5 py-2.5 border border-gray-200 text-stone-600 text-xs font-bold rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
                                 >
-                                  <option value="">Selecione...</option>
-                                  <option value="Santos">Santos</option>
-                                  <option value="São Vicente">São Vicente</option>
-                                  <option value="Praia Grande">Praia Grande</option>
-                                  <option value="Guarujá">Guarujá</option>
-                                  {newCondoCidade && !["Santos", "São Vicente", "Praia Grande", "Guarujá"].includes(newCondoCidade) && (
-                                    <option value={newCondoCidade}>{newCondoCidade}</option>
-                                  )}
-                                </select>
-                              </div>
-
-                              <div className="space-y-1 col-span-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
-                                <select
-                                  value={newCondoEstado}
-                                  onChange={(e) => setNewCondoEstado(e.target.value)}
-                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
+                                  Cancelar
+                                </button>
+                                <button
+                                  type="submit"
+                                  className="px-6 bg-[#af101a] hover:bg-[#900e15] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer"
                                 >
-                                  <option value="SP">São Paulo (SP)</option>
-                                  {newCondoEstado && newCondoEstado !== 'SP' && (
-                                    <option value={newCondoEstado}>{newCondoEstado}</option>
-                                  )}
-                                </select>
+                                  Cadastrar
+                                </button>
                               </div>
-
-                              <div className="space-y-1 col-span-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades</label>
-                                <input
-                                  type="number"
-                                  placeholder="80"
-                                  value={newCondoUnidades || ''}
-                                  onChange={(e) => setNewCondoUnidades(Number(e.target.value))}
-                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
-                              <button
-                                type="button"
-                                onClick={() => setShowCondoForm(false)}
-                                className="px-5 py-2.5 border border-gray-200 text-stone-600 text-xs font-bold rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-                              >
-                                Cancelar
-                              </button>
-                              <button
-                                type="submit"
-                                className="px-6 bg-[#af101a] hover:bg-[#900e15] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer"
-                              >
-                                Cadastrar
-                              </button>
-                            </div>
-                          </form>
+                            </form>
+                          </div>
                         </div>
                       </div>
+                    )}
+
+                    {/* Condominios List Representation */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {currentFilteredCondos.length === 0 ? (
+                        <div className="bg-white p-12 rounded-2xl border border-gray-150 text-center text-sm text-secondary col-span-2 w-full">
+                          <Building2 className="w-10 h-10 text-gray-350 mx-auto mb-2 animate-bounce" />
+                          <p className="font-semibold text-gray-700">Nenhum condomínio corresponde aos filtros de busca.</p>
+                          <p className="text-xs mt-1 text-gray-450">Tente digitar outros termos ou mude o filtro de status.</p>
+                        </div>
+                      ) : (
+                        currentFilteredCondos.map(item => (
+                          <div 
+                            key={item.id} 
+                            className="bg-white p-6 rounded-3xl border border-gray-200 shadow-xs flex flex-col justify-between text-left h-full group transition-all duration-200"
+                          >
+                            <div className="space-y-3 flex-1">
+                              <h5 className="font-sans font-bold text-[#101c29] text-lg leading-snug group-hover:text-primary transition-colors">
+                                {item.nome}
+                              </h5>
+                              <p className="text-stone-500 font-medium text-xs leading-relaxed flex items-start gap-1.5">
+                                <span className="text-gray-400 select-none shrink-0" aria-hidden="true">📍</span>
+                                <span>{item.endereco}, {item.bairro}</span>
+                              </p>
+                            </div>
+
+                            <div className="pt-5 mt-4 border-t border-gray-100 flex justify-end">
+                              <button
+                                onClick={() => setDetailedCondo(item)}
+                                className="w-full bg-[#af101a] hover:bg-[#930010] active:scale-[0.98] text-white px-5 py-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#af101a]/10 border-0"
+                                title="Ver os detalhes completos"
+                              >
+                                <span>Acessar Detalhes</span>
+                                <ArrowRight className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
-                  )}
 
-                   {/* Condominios List Representation */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {getFilteredCondos().length === 0 ? (
-                      <div className="bg-white p-8 rounded-2xl border border-gray-150 text-center text-sm text-secondary col-span-2 w-full">
-                        <Building2 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                        <p className="font-semibold">Nenhum condomínio cadastrado na sua carteira.</p>
-                        <p className="text-xs mt-1 text-gray-400">Use o formulário acima para cadastrar seu primeiro condomínio.</p>
-                      </div>
-                    ) : (
-                      getFilteredCondos().map(item => (
-                        <div key={item.id} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-                          <div className="flex justify-between items-start text-left">
-                            <div>
-                              <span className="text-[10px] text-primary font-bold uppercase tracking-wide">{item.id}</span>
-                              <h5 className="font-sans font-bold text-[#101c29] text-base leading-snug">{item.nome}</h5>
-                              <p className="text-[11px] text-gray-400 font-medium">CNPJ: {item.cnpj}</p>
-                            </div>
-                            <span className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase ${
-                              item.status === 'Crítico' ? 'bg-red-50 text-[#af101a]' : item.status === 'Alerta' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'
-                            }`}>
-                              {item.status}
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-gray-100 text-left">
-                            <div>
-                              <p className="text-[9px] uppercase font-bold text-gray-400">Síndico</p>
-                              <p className="text-xs font-bold text-[#101c29] truncate">{item.sindico}</p>
-                            </div>
-                            <div>
-                              <p className="text-[9px] uppercase font-bold text-gray-400">Total Unidades</p>
-                              <p className="text-xs font-bold text-[#101c29]">{item.unidades} aptos</p>
-                            </div>
-                            <div>
-                              <p className="text-[9px] uppercase font-bold text-gray-400">Moradores Est.</p>
-                              <p className="text-xs font-bold text-[#101c29]">{item.moradores} morad.</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs text-secondary bg-gray-50 -mx-5 -mb-5 px-5 py-3 rounded-b-2xl">
-                            <span className="font-medium text-[11px]">Receita: R$ {item.receita.toLocaleString('pt-BR')}/mês</span>
+                    {/* DETAILED CONDO SHIM MODAL (Requirement 2) - Bypassed in favor of CondoDetailsView */}
+                    {false && detailedCondo && (
+                      <div id="modal-visualizar-condo" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-fade-in">
+                        <div className="bg-white w-full max-w-xl rounded-[28px] shadow-[0_24px_60px_-15px_rgba(0,0,0,0.35)] border border-gray-100 overflow-hidden flex flex-col max-h-[90vh]">
+                          {/* Modal Header */}
+                          <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-[#101c29] text-white">
+                            <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                              <Building2 className="w-5 h-5 text-amber-500" /> Ficha do Condomínio
+                            </h4>
                             <button
-                              onClick={() => {
-                                if (confirm(`Tem certeza que deseja excluir o condomínio ${item.nome}?`)) {
-                                  setCondos(prev => prev.filter(c => c.id !== item.id));
-                                  
-                                  if (isSupabaseConfigured && supabase) {
-                                    supabase.from('condominios').delete().eq('id', item.id).then(({ error }) => {
-                                      if (error) console.error('Erro ao excluir condomínio no Supabase:', error.message);
-                                    });
-                                  }
-
-                                  addAuditLog('EXCLUIR', 'condominios', `Excluído condomínio ${item.nome}.`);
-                                  onShowNotification('Excluído!', `Condomínio ${item.nome} removido da base.`);
-                                }
-                              }}
-                              className="text-[#af101a] hover:underline font-bold text-[11px] cursor-pointer"
+                              onClick={() => setDetailedCondo(null)}
+                              className="text-gray-300 hover:text-white p-1 hover:bg-white/10 rounded-full transition-colors cursor-pointer border-0 bg-transparent animate-pulse"
                             >
-                              Excluir Registro
+                              <X className="w-5 h-5" />
                             </button>
                           </div>
+
+                          {/* Modal Body */}
+                          <div className="p-6 overflow-y-auto space-y-6 text-left">
+                            <div>
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h2 className="text-xl font-bold text-[#101c29] font-display leading-snug">{detailedCondo.nome}</h2>
+                                  <p className="text-xs text-secondary font-mono mt-0.5">Identificador Único: {detailedCondo.id}</p>
+                                </div>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                                  detailedCondo.status === 'Crítico' ? 'bg-red-100 text-[#af101a]' : detailedCondo.status === 'Alerta' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                                }`}>
+                                  {detailedCondo.status}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Informações Gerais */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4.5 rounded-2xl border border-gray-150">
+                              <div>
+                                <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">CNPJ / Inscrição</span>
+                                <p className="text-xs font-bold text-[#101c29] mt-0.5">{detailedCondo.cnpj || 'Isento/Não informado'}</p>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">Síndico Responsável</span>
+                                <p className="text-xs font-bold text-[#101c29] mt-0.5">{detailedCondo.sindico || 'Administradora Facilities'}</p>
+                              </div>
+                              <div className="md:col-span-2 pt-2 border-t border-gray-150/60">
+                                <span className="text-[10px] text-gray-400 font-extrabold uppercase tracking-wider block">Endereço Completo</span>
+                                <p className="text-xs font-bold text-[#101c29] mt-1 line-clamp-2">
+                                  🏢 {detailedCondo.endereco || 'Avenida Ana Costa, 142'}, {detailedCondo.bairro || 'Gonzaga'}<br />
+                                  CEP: {detailedCondo.cep || '11060-001'} | {detailedCondo.cidade || 'Santos'} - {detailedCondo.estado || 'SP'}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Quantidades e Estrutura */}
+                            <div className="space-y-2.5">
+                              <h5 className="text-xs font-extrabold text-[#101c29] uppercase tracking-wider">Estrutura Física & Ocupação</h5>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div className="border border-gray-150 p-3 rounded-2xl text-center bg-white">
+                                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Quant. Blocos</span>
+                                  <p className="text-lg font-extrabold text-[#101c29] mt-0.5">{detailedCondo.blocosCount || 2} blocos</p>
+                                </div>
+                                <div className="border border-gray-150 p-3 rounded-2xl text-center bg-white">
+                                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Unidades</span>
+                                  <p className="text-lg font-extrabold text-[#101c29] mt-0.5">{detailedCondo.unidades || 80} aptos</p>
+                                </div>
+                                <div className="border border-gray-150 p-3 rounded-2xl text-center bg-white">
+                                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Moradores</span>
+                                  <p className="text-lg font-extrabold text-[#101c29] mt-0.5">{detailedCondo.moradores || 224} est.</p>
+                                </div>
+                                <div className="border border-gray-150 p-3 rounded-2xl text-center bg-white">
+                                  <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Proprietários</span>
+                                  <p className="text-lg font-extrabold text-[#101c29] mt-0.5">{detailedCondo.proprietarios || 76} priv.</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Financeiro Básico */}
+                            <div className="space-y-2.5">
+                              <h5 className="text-xs font-extrabold text-[#101c29] uppercase tracking-wider">Indicadores Financeiros Ordinários</h5>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="bg-emerald-50 border border-emerald-100 p-3.5 rounded-xl">
+                                  <span className="text-[9px] text-emerald-600 font-bold uppercase tracking-wider">Arrecadação Prevista</span>
+                                  <p className="text-sm font-black text-emerald-800 mt-1">R$ {detailedCondo.receita?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                </div>
+                                <div className="bg-red-50 border border-red-100 p-3.5 rounded-xl">
+                                  <span className="text-[9px] text-red-600 font-bold uppercase tracking-wider">Despesas Contratuais</span>
+                                  <p className="text-sm font-black text-red-800 mt-1">R$ {detailedCondo.despesa?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                </div>
+                                <div className="bg-blue-50 border border-blue-100 p-3.5 rounded-xl">
+                                  <span className="text-[9px] text-blue-600 font-bold uppercase tracking-wider">Saldo de Caixa</span>
+                                  <p className="text-sm font-black text-blue-800 mt-1">R$ {(detailedCondo.receita - detailedCondo.despesa)?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center bg-amber-50/40 p-3 rounded-xl border border-amber-100 text-xs mt-2 text-stone-700">
+                                <span className="font-semibold">Índice Geral de Inadimplência:</span>
+                                <span className={`font-extrabold ${detailedCondo.inadimplenciaPercent > 12 ? 'text-[#af101a]' : 'text-[#101c29]'}`}>{detailedCondo.inadimplenciaPercent}%</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Modal Footer */}
+                          <div className="p-6 border-t border-gray-100 bg-gray-50 flex flex-wrap justify-between items-center gap-3">
+                            <button
+                              onClick={() => {
+                                setDetailedCondo(null);
+                                startEditingCondo(detailedCondo);
+                              }}
+                              className="px-4 py-2 bg-white border border-gray-250 hover:bg-gray-100 text-[#101c29] text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-[#af101a]" /> Editar Informações
+                            </button>
+
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleDeleteCondo(detailedCondo)}
+                                className="px-4 py-2 bg-red-50 hover:bg-red-100 text-[#af101a] text-xs font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Excluir Registro
+                              </button>
+                              <button
+                                onClick={() => setDetailedCondo(null)}
+                                className="px-5 py-2 bg-[#101c29] text-white text-xs font-bold rounded-lg hover:bg-stone-850 transition-colors cursor-pointer"
+                              >
+                                Fechar Ficha
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      ))
+                      </div>
+                    )}
+
+                    {/* EDIT CONDO MODAL (Requirement 3) */}
+                    {editingCondo && (
+                      <div id="modal-edicao-condo" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-fade-in">
+                        <div className="bg-white w-full max-w-xl rounded-[28px] shadow-[0_24px_60px_-15px_rgba(0,0,0,0.35)] border border-gray-100 overflow-hidden flex flex-col max-h-[90vh]">
+                          {/* Modal Header */}
+                          <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <h4 className="text-xs font-extrabold text-[#101c29] uppercase tracking-wider flex items-center gap-2">
+                              <Edit2 className="w-4 h-4 text-[#af101a]" /> Editar Condomínio
+                            </h4>
+                            <button
+                              onClick={() => setEditingCondo(null)}
+                              className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full transition-colors cursor-pointer border-0 bg-transparent"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          {/* Modal Body */}
+                          <div className="p-6 overflow-y-auto space-y-4 text-left">
+                            <form onSubmit={handleSaveEditCondo} className="space-y-4">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-1 md:col-span-2">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Nome do Condomínio *</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Ex: Residencial Miramar"
+                                    value={editCondoName}
+                                    onChange={(e) => setEditCondoName(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                    required
+                                  />
+                                </div>
+
+                                <div className="space-y-1 md:col-span-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ *</label>
+                                  <input
+                                    type="text"
+                                    placeholder="00.000.000/0001-00"
+                                    value={editCondoCnpj}
+                                    onChange={(e) => setEditCondoCnpj(formatCNPJ(e.target.value))}
+                                    maxLength={18}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
+                                    required
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-1 md:col-span-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between items-center">
+                                    <span>CEP *</span>
+                                    {isFetchingEditCep && <span className="text-[9px] text-blue-500 animate-pulse font-medium">Buscando...</span>}
+                                    {editCepError && <span className="text-[9px] text-[#af101a] font-medium">{editCepError}</span>}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    maxLength={9}
+                                    placeholder="00000-000"
+                                    value={editCondoCep}
+                                    onChange={(e) => handleEditCepChange(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
+                                  />
+                                </div>
+
+                                <div className="space-y-1 md:col-span-2">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Ex: Av. Ana Costa, 142"
+                                    value={editCondoEndereco}
+                                    onChange={(e) => setEditCondoEndereco(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Ex: Gonzaga"
+                                    value={editCondoBairro}
+                                    onChange={(e) => setEditCondoBairro(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade</label>
+                                  <input
+                                    type="text"
+                                    value={editCondoCidade}
+                                    onChange={(e) => setEditCondoCidade(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
+                                  <input
+                                    type="text"
+                                    maxLength={2}
+                                    value={editCondoEstado}
+                                    onChange={(e) => setEditCondoEstado(e.target.value.toUpperCase())}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Responsável</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Nome do Síndico ou Administradora"
+                                    value={editCondoSindico}
+                                    onChange={(e) => setEditCondoSindico(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Status</label>
+                                  <select
+                                    value={editCondoStatus}
+                                    onChange={(e) => setEditCondoStatus(e.target.value)}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
+                                  >
+                                    <option value="Normal">Normal</option>
+                                    <option value="Alerta">Alerta</option>
+                                    <option value="Crítico">Crítico</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Qtd Blocos</label>
+                                  <input
+                                    type="number"
+                                    value={editCondoBlocos}
+                                    onChange={(e) => setEditCondoBlocos(Number(e.target.value))}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Qtd Unidades</label>
+                                  <input
+                                    type="number"
+                                    value={editCondoUnidades}
+                                    onChange={(e) => {
+                                      const val = Number(e.target.value);
+                                      setEditCondoUnidades(val);
+                                      setEditCondoMoradores(Math.round(val * 2.8));
+                                      setEditCondoProprietarios(Math.round(val * 0.95));
+                                    }}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Moradores</label>
+                                  <input
+                                    type="number"
+                                    value={editCondoMoradores}
+                                    onChange={(e) => setEditCondoMoradores(Number(e.target.value))}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Inadimplência %</label>
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    value={editCondoInadimplencia}
+                                    onChange={(e) => setEditCondoInadimplencia(Number(e.target.value))}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Receita (R$)</label>
+                                  <input
+                                    type="number"
+                                    value={editCondoReceita}
+                                    onChange={(e) => setEditCondoReceita(Number(e.target.value))}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Despesa (R$)</label>
+                                  <input
+                                    type="number"
+                                    value={editCondoDespesa}
+                                    onChange={(e) => setEditCondoDespesa(Number(e.target.value))}
+                                    className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingCondo(null)}
+                                  className="px-5 py-2.5 border border-gray-200 text-[#101c29] text-xs font-bold rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  type="submit"
+                                  className="px-6 bg-[#af101a] hover:bg-[#900e15] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer"
+                                >
+                                  Salvar Alterações
+                                </button>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* ADMIN TAB: FINANCEIRO GERAL */}
               {activeTab === 'admin_financeiro' && (
@@ -2292,8 +3051,16 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                             getFilteredCondos().map((item, idx) => {
                               const saldo = item.receita - item.despesa;
                               return (
-                                <tr key={idx} className="hover:bg-gray-50">
-                                  <td className="p-4 font-bold text-[#101c29]">{item.nome}</td>
+                                <tr 
+                                  key={idx} 
+                                  onClick={() => {
+                                    setDetailedCondo(item);
+                                    setActiveTab('admin_condominios');
+                                  }}
+                                  className="hover:bg-gray-50 cursor-pointer"
+                                  title="Clique para ver os detalhes completos deste condomínio"
+                                >
+                                  <td className="p-4 font-bold text-[#101c29] hover:text-primary transition-colors">{item.nome}</td>
                                   <td className="p-4 font-semibold text-secondary">R$ {item.receita.toLocaleString('pt-BR')}</td>
                                   <td className="p-4 font-bold text-[#af101a]">{item.inadimplenciaPercent}%</td>
                                   <td className="p-4">
