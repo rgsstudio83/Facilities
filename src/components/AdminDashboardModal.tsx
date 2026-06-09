@@ -3,6 +3,7 @@ import {
   Building2, 
   Users, 
   UserCheck, 
+  UserPlus,
   FileCheck, 
   TrendingUp, 
   TrendingDown, 
@@ -215,6 +216,13 @@ export default function AdminDashboardModal({
   const [isConfirmDeleteRoleModalOpen, setIsConfirmDeleteRoleModalOpen] = useState(false);
   const [roleTypeToDelete, setRoleTypeToDelete] = useState<{ id: string; nome: string } | null>(null);
 
+  // Bulk add residents state variables
+  const [isBulkAddMoradoresOpen, setIsBulkAddMoradoresOpen] = useState(false);
+  const [bulkAddCondoId, setBulkAddCondoId] = useState<string | null>(null);
+  const [bulkAddRows, setBulkAddRows] = useState<{ nome: string; unidade: string; cpf: string; proprietario: boolean; telefone: string }[]>([
+    { nome: '', unidade: '', cpf: '', proprietario: true, telefone: '(13) 99123-4567' }
+  ]);
+
   const [newVisitorNome, setNewVisitorNome] = useState('');
   const [newVisitorRg, setNewVisitorRg] = useState('');
   const [newVisitorUnidade, setNewVisitorUnidade] = useState('');
@@ -270,11 +278,105 @@ export default function AdminDashboardModal({
 
     const fetchAdminData = async () => {
       if (!isSupabaseConfigured || !supabase) {
-        setCondos([]);
-        setMoradoresList([]);
-        setAuditLogs([]);
-        setVisitantes([]);
-        setEncomendas([]);
+        // Carrega condomínios simulados ou padrão
+        const localCondos = localStorage.getItem('supabase_sim_condominios');
+        if (localCondos) {
+          setCondos(JSON.parse(localCondos));
+        } else {
+          const defaultCondos: Condominio[] = [
+            {
+              id: 'cd-1',
+              nome: 'Vista Parque Residencial',
+              cnpj: '00.123.456/0001-99',
+              endereco: 'Av. Bartolomeu de Gusmão, 142',
+              bairro: 'Aparecida',
+              cidade: 'Santos',
+              estado: 'SP',
+              sindico: 'Cristhiane Xavier',
+              unidades: 120,
+              moradores: 3,
+              proprietarios: 2,
+              receita: 154000,
+              despesa: 110000,
+              inadimplenciaPercent: 12.0,
+              status: 'Normal'
+            },
+            {
+              id: 'cd-2',
+              nome: 'Parque das Amoreiras',
+              cnpj: '12.345.678/0001-00',
+              endereco: 'Rua das Orquídeas, 88',
+              bairro: 'Amoreiras',
+              cidade: 'Campinas',
+              estado: 'SP',
+              sindico: 'Marcos Evangelista',
+              unidades: 80,
+              moradores: 0,
+              proprietarios: 0,
+              receita: 68000,
+              despesa: 72000,
+              inadimplenciaPercent: 21.0,
+              status: 'Alerta'
+            },
+            {
+              id: 'cd-3',
+              nome: 'Residencial Miramar',
+              cnpj: '33.444.555/0001-22',
+              endereco: 'Av. Presidente Wilson, 400',
+              bairro: 'José Menino',
+              cidade: 'Santos',
+              estado: 'SP',
+              sindico: 'Mariana Couto',
+              unidades: 95,
+              moradores: 0,
+              proprietarios: 0,
+              receita: 118000,
+              despesa: 92000,
+              inadimplenciaPercent: 4.5,
+              status: 'Normal'
+            }
+          ];
+          localStorage.setItem('supabase_sim_condominios', JSON.stringify(defaultCondos));
+          setCondos(defaultCondos);
+        }
+
+        // Carrega moradores simulados ou padrão
+        const localMoradores = localStorage.getItem('supabase_sim_moradores');
+        if (localMoradores) {
+          setMoradoresList(JSON.parse(localMoradores));
+        } else {
+          const defaultMoradores: MoradorUnit[] = [
+            { id: 'm-1', nome: 'Roberto Silva', cpf: '222.222.222-22', unidade: 'Apto 41-B', condominioId: 'cd-1', proprietario: true, telefone: '(13) 99123-4567' },
+            { id: 'm-2', nome: 'Jorge Alencar', cpf: '444.444.444-44', unidade: 'Apto 102', condominioId: 'cd-1', proprietario: true, telefone: '(11) 98765-4321' },
+            { id: 'm-3', nome: 'Mariana Couto', cpf: '555.555.555-55', unidade: 'Apto 204', condominioId: 'cd-1', proprietario: true, telefone: '(13) 98111-2233' }
+          ];
+          localStorage.setItem('supabase_sim_moradores', JSON.stringify(defaultMoradores));
+          setMoradoresList(defaultMoradores);
+        }
+
+        // Carrega logs de auditoria simulados ou padrão
+        const localAudit = localStorage.getItem('supabase_sim_audit_logs');
+        if (localAudit) {
+          setAuditLogs(JSON.parse(localAudit));
+        } else {
+          setAuditLogs([]);
+        }
+
+        // Carrega visitantes simulados ou padrão
+        const localVisitantes = localStorage.getItem('supabase_sim_visitantes');
+        if (localVisitantes) {
+          setVisitantes(JSON.parse(localVisitantes));
+        } else {
+          setVisitantes([]);
+        }
+
+        // Carrega encomendas simuladas ou padrão
+        const localEncomendas = localStorage.getItem('supabase_sim_encomendas');
+        if (localEncomendas) {
+          setEncomendas(JSON.parse(localEncomendas));
+        } else {
+          setEncomendas([]);
+        }
         
         // Carrega perfis simulados para garantir funcionamento offline/demonstrativo
         const localData = localStorage.getItem('supabase_sim_perfis');
@@ -506,7 +608,13 @@ export default function AdminDashboardModal({
       status: 'Normal'
     };
 
-    setCondos(prev => [...prev, newC]);
+    setCondos(prev => {
+      const list = [...prev, newC];
+      if (!isSupabaseConfigured || !supabase) {
+        localStorage.setItem('supabase_sim_condominios', JSON.stringify(list));
+      }
+      return list;
+    });
     addAuditLog('CRIAR', 'condominios', `Criado novo condomínio: ${newCondoName} (Unidades: ${newCondoUnidades})`);
 
     if (isSupabaseConfigured && supabase) {
@@ -544,7 +652,13 @@ export default function AdminDashboardModal({
 
   const handleDeleteCondo = (id: string, name: string) => {
     if (!verifyWritePermission(['admin'], `Deletar Condomínio - ID: ${id}`)) return;
-    setCondos(prev => prev.filter(c => c.id !== id));
+    setCondos(prev => {
+      const list = prev.filter(c => c.id !== id);
+      if (!isSupabaseConfigured || !supabase) {
+        localStorage.setItem('supabase_sim_condominios', JSON.stringify(list));
+      }
+      return list;
+    });
     addAuditLog('EXCLUIR', 'condominios', `Excluído condomínio: ${name}`);
 
     if (isSupabaseConfigured && supabase) {
@@ -571,7 +685,13 @@ export default function AdminDashboardModal({
       telefone: '(13) 99123-4567'
     };
 
-    setMoradoresList(prev => [...prev, newM]);
+    setMoradoresList(prev => {
+      const list = [...prev, newM];
+      if (!isSupabaseConfigured || !supabase) {
+        localStorage.setItem('supabase_sim_moradores', JSON.stringify(list));
+      }
+      return list;
+    });
     addAuditLog('CRIAR', 'moradores', `Cadastrado residente: ${newMoradorNome} na unidade ${newMoradorUnidade}`);
 
     if (isSupabaseConfigured && supabase) {
@@ -595,9 +715,80 @@ export default function AdminDashboardModal({
     setShowMoradorForm(false);
   };
 
+  const handleBulkCreateMoradores = (e: FormEvent) => {
+    e.preventDefault();
+    if (!verifyWritePermission(['admin', 'colaborador', 'sindico', 'subsindico'], 'Cadastrar Moradores em Lote')) return;
+    if (!bulkAddCondoId) return;
+
+    // Filter out rows that are completely empty first, but if any semi-empty rows exist, alert.
+    const validRows = bulkAddRows.filter(row => row.nome.trim() || row.unidade.trim() || row.cpf.trim());
+    
+    if (validRows.length === 0) {
+      onShowMessage("Erro de Validação", "Por favor, preencha pelo menos um morador antes de salvar.");
+      return;
+    }
+
+    const missingFields = validRows.some(row => !row.nome.trim() || !row.unidade.trim());
+    if (missingFields) {
+      onShowMessage("Erro de Validação", "Todas as linhas preenchidas devem ter pelo menos Nome e Unidade definidos.");
+      return;
+    }
+
+    const condoObj = condos.find(c => c.id === bulkAddCondoId);
+    const condoName = condoObj ? condoObj.nome : bulkAddCondoId;
+
+    const newResidents: MoradorUnit[] = validRows.map((row, idx) => ({
+      id: `m-${Date.now()}-${idx}`,
+      nome: row.nome.trim(),
+      cpf: row.cpf.trim() || '000.000.000-00',
+      unidade: row.unidade.trim(),
+      condominioId: bulkAddCondoId,
+      proprietario: row.proprietario,
+      telefone: row.telefone.trim() || '(13) 99123-4567'
+    }));
+
+    setMoradoresList(prev => {
+      const list = [...newResidents, ...prev];
+      if (!isSupabaseConfigured || !supabase) {
+        localStorage.setItem('supabase_sim_moradores', JSON.stringify(list));
+      }
+      return list;
+    });
+    addAuditLog('CRIAR', 'moradores', `Cadastrados ${newResidents.length} moradores em lote no condomínio ${condoName}`);
+
+    if (isSupabaseConfigured && supabase) {
+      const payloads = newResidents.map(r => ({
+        id: r.id,
+        nome: r.nome,
+        cpf: r.cpf,
+        unidade: r.unidade,
+        condominio_id: r.condominioId,
+        proprietario: r.proprietario,
+        telefone: r.telefone
+      }));
+
+      supabase.from('moradores').insert(payloads).then(({ error }) => {
+        if (error) console.error('Erro ao salvar moradores em lote no Supabase:', error.message);
+      });
+    }
+
+    onShowMessage("Sucesso", `${newResidents.length} moradores adicionados com sucesso ao condomínio ${condoName}!`);
+    
+    // Reset and close modal
+    setBulkAddRows([{ nome: '', unidade: '', cpf: '', proprietario: true, telefone: '(13) 99123-4567' }]);
+    setBulkAddCondoId(null);
+    setIsBulkAddMoradoresOpen(false);
+  };
+
   const handleDeleteMorador = (id: string, name: string) => {
     if (!verifyWritePermission(['admin'], `Excluir Morador - ID: ${id}`)) return;
-    setMoradoresList(prev => prev.filter(m => m.id !== id));
+    setMoradoresList(prev => {
+      const list = prev.filter(m => m.id !== id);
+      if (!isSupabaseConfigured || !supabase) {
+        localStorage.setItem('supabase_sim_moradores', JSON.stringify(list));
+      }
+      return list;
+    });
     addAuditLog('EXCLUIR', 'moradores', `Excluído morador: ${name}`);
 
     if (isSupabaseConfigured && supabase) {
@@ -1926,62 +2117,108 @@ export default function AdminDashboardModal({
                     )}
 
                     {/* Listings */}
-                    <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left">
+                    <div>
                       <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider mb-4">Base Operativa de Condomínios</h4>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
-                          <thead>
-                            <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase text-[9px]">
-                              <th className="py-2.5 px-2">Nome / CNPJ</th>
-                              <th className="py-2.5 px-2">Endereço</th>
-                              <th className="py-2.5 px-2">Bairro</th>
-                              <th className="py-2.5 px-2">Cidade / UF</th>
-                              <th className="py-2.5 px-2">Síndico</th>
-                              <th className="py-2.5 px-2">Unidades</th>
-                              <th className="py-2.5 px-2">Inadimplência</th>
-                              <th className="py-2.5 px-2">Status</th>
-                              <th className="py-2.5 px-2 text-right">Ação</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {visibleCondos.map(item => (
-                              <tr key={item.id} className="border-b border-gray-100 hover:bg-slate-50 transition-colors">
-                                <td className="py-3 px-2">
-                                  <div className="font-bold text-stone-850">{item.nome}</div>
-                                  <div className="text-[10px] text-gray-400">{item.cnpj}</div>
-                                </td>
-                                <td className="py-3 px-2 text-secondary">{item.endereco}</td>
-                                <td className="py-3 px-2 text-secondary font-semibold">{item.bairro || '-'}</td>
-                                <td className="py-3 px-2 text-secondary">{item.cidade} / {item.estado}</td>
-                                <td className="py-3 px-2 font-bold text-stone-800">{item.sindico}</td>
-                                <td className="py-3 px-2 font-mono text-stone-600 font-semibold">{item.unidades}</td>
-                                <td className="py-3 px-2 font-mono text-orange-600 font-semibold">{item.inadimplenciaPercent}%</td>
-                                <td className="py-3 px-2">
-                                  <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                    item.status === 'Normal' ? 'bg-emerald-50 text-emerald-600' :
-                                    item.status === 'Alerta' ? 'bg-amber-50 text-amber-600' :
-                                    'bg-red-50 text-red-650'
-                                  }`}>
-                                    {item.status}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-2 text-right">
+                      
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {visibleCondos.map(item => {
+                          const countMoradores = moradoresList.filter(m => m.condominioId === item.id).length;
+                          return (
+                            <div 
+                              key={item.id} 
+                              className="bg-white p-6 rounded-[24px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] flex flex-col md:flex-row gap-6 justify-between items-stretch hover:shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all duration-300 group relative min-h-[220px]"
+                            >
+                              {/* Left Side: Identity and Basic Info */}
+                              <div className="flex-1 flex flex-col justify-between text-left">
+                                <div>
+                                  <div className="flex items-center gap-2.5">
+                                    <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
+                                      item.status === 'Normal' ? 'bg-emerald-50 text-emerald-600' :
+                                      item.status === 'Alerta' ? 'bg-amber-50 text-amber-600' :
+                                      'bg-red-50 text-red-650'
+                                    }`}>
+                                      {item.status}
+                                    </span>
+                                    <span className="text-[9px] text-gray-400 font-mono">ID: {item.id}</span>
+                                  </div>
+                                  
+                                  <h3 className="font-extrabold text-[#0F172A] text-base tracking-tight font-display mt-2.5 group-hover:text-primary transition-colors duration-200">
+                                    {item.nome}
+                                  </h3>
+                                  <p className="text-[10px] text-gray-400 font-mono mt-0.5">{item.cnpj}</p>
+
+                                  <div className="flex items-start gap-2 mt-4 text-xs text-stone-600">
+                                    <MapPin className="w-4 h-4 text-gray-450 shrink-0 mt-0.5" />
+                                    <div>
+                                      <p className="font-medium text-stone-850 leading-tight">{item.endereco}</p>
+                                      <p className="text-[10px] text-gray-400 mt-0.5">{item.bairro || '-'}, {item.cidade} / {item.estado}</p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Actions row */}
+                                <div className="border-t border-gray-100 mt-4 pt-3 flex justify-between items-center text-xs">
                                   {activeProfile === 'admin' ? (
                                     <button
+                                      type="button"
                                       onClick={() => handleDeleteCondo(item.id, item.nome)}
-                                      className="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50 transition-colors cursor-pointer"
+                                      className="text-red-650 hover:text-red-800 hover:bg-slate-50 p-2 rounded-xl transition-all duration-205 cursor-pointer flex items-center gap-1 border-0 bg-transparent"
                                       title="Remover Condomínio"
                                     >
-                                      <Trash2 className="w-4 h-4" />
+                                      <Trash2 className="w-4 h-4" /> <span className="text-[10px] font-bold uppercase tracking-wide">Excluir</span>
                                     </button>
                                   ) : (
-                                    <span className="text-[9px] text-gray-400 bg-gray-100 px-2 py-1 rounded inline-flex items-center gap-0.5 select-none"><Lock className="w-2.5 h-2.5" /> Lock</span>
+                                    <span className="text-[9px] text-gray-400 bg-gray-50 border border-gray-100 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 select-none">
+                                      <Lock className="w-3 h-3" /> Bloqueado RLS
+                                    </span>
                                   )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                                </div>
+                              </div>
+
+                              {/* Right Side: Operational Stats / Counters */}
+                              <div className="w-full md:w-[240px] bg-slate-50/75 p-4 rounded-2xl flex flex-col justify-between border border-slate-100/40 shrink-0">
+                                <div className="space-y-2">
+                                  {/* Resident and Unit Stats Row */}
+                                  <div className="bg-white p-2.5 rounded-xl border border-slate-100 text-left flex items-center justify-between">
+                                    <div>
+                                      <span className="text-[9px] uppercase font-bold text-gray-450 block">Síndico Atribuído</span>
+                                      <span className="font-bold text-[#0F172A] text-xs truncate max-w-[130px] block mt-0.5" title={item.sindico}>
+                                        {item.sindico}
+                                      </span>
+                                    </div>
+                                    <UserCheck className="w-4 h-4 text-slate-400 shrink-0" />
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-100 text-left">
+                                      <span className="text-[9px] uppercase font-bold text-gray-400 block">Unidades</span>
+                                      <span className="font-black text-[#0F172A] text-sm block mt-0.5">{item.unidades}</span>
+                                    </div>
+                                    <div className="bg-white p-2.5 rounded-xl border border-slate-100 text-left">
+                                      <span className="text-[9px] uppercase font-bold text-indigo-600 block flex items-center gap-1">
+                                        Moradores
+                                      </span>
+                                      <span className="font-black text-indigo-700 text-sm block mt-0.5">{countMoradores}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!verifyWritePermission(['admin', 'colaborador', 'sindico', 'subsindico'], 'Verificar Permissão de Cadastro')) return;
+                                    setBulkAddCondoId(item.id);
+                                    setBulkAddRows([{ nome: '', unidade: '', cpf: '', proprietario: true, telefone: '(13) 99123-4567' }]);
+                                    setIsBulkAddMoradoresOpen(true);
+                                  }}
+                                  className="w-full mt-3 py-2.5 px-3 bg-[#4F46E5]/10 hover:bg-[#4F46E5]/20 text-[#4F46E5] text-xs font-bold rounded-xl transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer border-0 shadow-xs"
+                                >
+                                  <UserPlus className="w-4 h-4" /> Add Moradores Lote
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -2306,22 +2543,6 @@ export default function AdminDashboardModal({
                 {/* SUB-PAGE: GERENCIAMENTO DE PERFIS / ROLES */}
                 {activeSubPage === 'perfis' && (
                   <div className="space-y-6 text-left animate-fade-in text-[#101c29]">
-                    <div className="bg-[#101c29] text-white p-5 rounded-2xl border border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                      <div className="space-y-1">
-                        <span className="bg-[#af101a] text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded animate-pulse">
-                          Segurança e Governança
-                        </span>
-                        <h3 className="text-lg font-bold font-display flex items-center gap-2">
-                          <ShieldCheck className="w-5 h-5 text-emerald-400" /> Matriz de Perfis e Roles do Sistema
-                        </h3>
-                        <p className="text-xs text-gray-300">
-                          Apenas administradores possuem acesso de modificação rápida para inserir, alterar ou remover permissões.
-                        </p>
-                      </div>
-                      <div className="bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/10 text-xs font-mono text-gray-300">
-                        Perfil Ativo: <strong className="text-emerald-400 uppercase font-black">{activeProfile}</strong>
-                      </div>
-                    </div>
 
                     {/* Alerta de permissão para outros perfis que não sejam admin */}
                     {activeProfile !== 'admin' && (
@@ -3017,6 +3238,159 @@ export default function AdminDashboardModal({
         </div>
 
       </div>
+
+      {/* MODAL DE CADASTRO DE MORADORES EM LOTE */}
+      {isBulkAddMoradoresOpen && bulkAddCondoId && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#010811]/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-[24px] max-w-4xl w-full p-6 sm:p-8 shadow-[0_20px_50px_rgba(15,23,42,0.15)] space-y-6 animate-fade-in my-8 text-left max-h-[90vh] flex flex-col justify-between">
+            <div>
+              {/* Header */}
+              <div className="flex justify-between items-center pb-4 border-b border-gray-100 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-indigo-50 text-indigo-650 flex items-center justify-center font-bold shadow-xs">
+                    <UserPlus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-[#0f1b29] uppercase tracking-wider font-display">
+                      Cadastrar Moradores em Lote
+                    </h3>
+                    <p className="text-xs text-secondary mt-0.5">
+                      Condomínio Selecionado: <strong className="text-indigo-650 font-bold font-sans">{condos.find(c => c.id === bulkAddCondoId)?.nome || bulkAddCondoId}</strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBulkAddMoradoresOpen(false);
+                    setBulkAddCondoId(null);
+                  }}
+                  className="p-1 px-2.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors border-0 bg-transparent cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Description bar */}
+              <div className="bg-indigo-50/50 rounded-xl p-3 border border-indigo-100/30 text-[11px] text-[#4F46E5] leading-relaxed shrink-0 mt-4">
+                <strong>Dica de Produtividade:</strong> Adicione quantos moradores desejar clicando no botão <strong>"+ Adicionar Outra Linha"</strong> abaixo. Certifique-se de preencher pelo menos o nome e a respectiva unidade/bloco de cada morador.
+              </div>
+
+              {/* Rows List */}
+              <form onSubmit={handleBulkCreateMoradores} className="flex flex-col gap-4 overflow-y-auto max-h-[50vh] pr-2 mt-5 py-1">
+                {bulkAddRows.map((row, index) => (
+                  <div 
+                    key={index} 
+                    className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-[#F8FAFC] p-4 rounded-2xl relative border border-slate-100 hover:border-slate-200 transition-colors duration-205"
+                  >
+                    {/* Badge row indicator for visual feedback */}
+                    <span className="absolute top-2 left-2 bg-slate-200/80 text-stone-600 text-[9px] px-2 py-0.5 rounded-md font-extrabold font-mono select-none">
+                      #{index + 1}
+                    </span>
+
+                    <div className="md:col-span-5 text-left mt-3 md:mt-0">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Nome Completo *</label>
+                      <input
+                        type="text"
+                        required
+                        value={row.nome}
+                        onChange={(e) => {
+                          const updated = [...bulkAddRows];
+                          updated[index].nome = e.target.value;
+                          setBulkAddRows(updated);
+                        }}
+                        placeholder="Ex: Clara Ribeiro de Souza"
+                        className="w-full bg-white border border-gray-155 text-xs p-2.5 rounded-xl outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all font-medium text-[#0f1b29]"
+                      />
+                    </div>
+
+                    <div className="md:col-span-3 text-left">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Unidade / Apto *</label>
+                      <input
+                        type="text"
+                        required
+                        value={row.unidade}
+                        onChange={(e) => {
+                          const updated = [...bulkAddRows];
+                          updated[index].unidade = e.target.value;
+                          setBulkAddRows(updated);
+                        }}
+                        placeholder="Ex: B2-Apto 42"
+                        className="w-full bg-white border border-gray-155 text-xs p-2.5 rounded-xl outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all font-medium text-[#0f1b29]"
+                      />
+                    </div>
+
+                    <div className="md:col-span-3 text-left">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">CPF (Opcional)</label>
+                      <input
+                        type="text"
+                        value={row.cpf}
+                        onChange={(e) => {
+                          const updated = [...bulkAddRows];
+                          updated[index].cpf = e.target.value;
+                          setBulkAddRows(updated);
+                        }}
+                        placeholder="000.000.000-00"
+                        className="w-full bg-white border border-gray-155 text-xs p-2.5 rounded-xl outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all font-normal text-[#0f1b29]"
+                      />
+                    </div>
+
+                    <div className="md:col-span-1 flex justify-center pb-1">
+                      {bulkAddRows.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBulkAddRows(bulkAddRows.filter((_, i) => i !== index));
+                          }}
+                          className="p-2 text-red-600 hover:text-red-750 hover:bg-red-50 bg-transparent border-0 rounded-xl transition-all duration-200 cursor-pointer shrink-0"
+                          title="Remover este registro"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      ) : (
+                        <div className="w-5 h-5"></div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </form>
+            </div>
+
+            {/* Footer with Actions */}
+            <div className="border-t border-gray-100 pt-5 flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkAddRows([...bulkAddRows, { nome: '', unidade: '', cpf: '', proprietario: true, telefone: '(13) 99123-4567' }]);
+                }}
+                className="w-full sm:w-auto py-2.5 px-5 bg-slate-100 hover:bg-slate-200 text-stone-700 text-xs font-bold rounded-xl transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer border-0"
+              >
+                <Plus className="w-4 h-4 text-indigo-650" /> + Adicionar Outra Linha
+              </button>
+
+              <div className="flex gap-3 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBulkAddMoradoresOpen(false);
+                    setBulkAddCondoId(null);
+                  }}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-gray-50 hover:bg-gray-100 rounded-xl text-stone-500 text-xs font-bold transition-all border border-gray-200 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkCreateMoradores}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-[#4F46E5] hover:bg-[#3b33bd] text-white text-xs font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer border-0 shadow-md"
+                >
+                  <Check className="w-4 h-4" /> Salvar Todos os Residentes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE ROLE */}
       {isConfirmDeleteRoleModalOpen && roleTypeToDelete && (
