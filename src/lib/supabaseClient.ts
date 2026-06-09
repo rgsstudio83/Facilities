@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS condominios (
   nome TEXT NOT NULL,
   cnpj TEXT,
   endereco TEXT,
+  bairro TEXT,
   cidade TEXT,
   estado TEXT,
   sindico TEXT,
@@ -183,6 +184,8 @@ CREATE TABLE IF NOT EXISTS condominios (
   status TEXT DEFAULT 'Normal',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+ALTER TABLE condominios ADD COLUMN IF NOT EXISTS bairro TEXT;
 
 -- 7. Tabela de Moradores
 CREATE TABLE IF NOT EXISTS moradores (

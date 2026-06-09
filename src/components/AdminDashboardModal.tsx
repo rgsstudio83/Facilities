@@ -72,6 +72,7 @@ interface Condominio {
   nome: string;
   cnpj: string;
   endereco: string;
+  bairro: string;
   cidade: string;
   estado: string;
   sindico: string;
@@ -181,6 +182,10 @@ export default function AdminDashboardModal({
   const [newCondoCnpj, setNewCondoCnpj] = useState('');
   const [newCondoSindico, setNewCondoSindico] = useState('');
   const [newCondoUnidades, setNewCondoUnidades] = useState(60);
+  const [newCondoEndereco, setNewCondoEndereco] = useState('');
+  const [newCondoBairro, setNewCondoBairro] = useState('');
+  const [newCondoCidade, setNewCondoCidade] = useState('');
+  const [newCondoEstado, setNewCondoEstado] = useState('');
 
   const [newMoradorNome, setNewMoradorNome] = useState('');
   const [newMoradorCpf, setNewMoradorCpf] = useState('');
@@ -201,6 +206,10 @@ export default function AdminDashboardModal({
   const [newRoleTypeNome, setNewRoleTypeNome] = useState('');
   const [newRoleTypeDescricao, setNewRoleTypeDescricao] = useState('');
   const [selectedRoleTypeId, setSelectedRoleTypeId] = useState<string | null>(null);
+
+  // Delete Role Confirmation modal state
+  const [isConfirmDeleteRoleModalOpen, setIsConfirmDeleteRoleModalOpen] = useState(false);
+  const [roleTypeToDelete, setRoleTypeToDelete] = useState<{ id: string; nome: string } | null>(null);
 
   const [newVisitorNome, setNewVisitorNome] = useState('');
   const [newVisitorRg, setNewVisitorRg] = useState('');
@@ -291,6 +300,7 @@ export default function AdminDashboardModal({
             nome: c.nome,
             cnpj: c.cnpj || '',
             endereco: c.endereco || '',
+            bairro: c.bairro || '',
             cidade: c.cidade || '',
             estado: c.estado || '',
             sindico: c.sindico || '',
@@ -478,9 +488,10 @@ export default function AdminDashboardModal({
       id: `cd-${Date.now()}`,
       nome: newCondoName,
       cnpj: newCondoCnpj || '00.000.000/0001-00',
-      endereco: 'Rua Comercial de Santos',
-      cidade: 'Santos',
-      estado: 'SP',
+      endereco: newCondoEndereco || 'Rua Comercial de Santos',
+      bairro: newCondoBairro || 'Centro',
+      cidade: newCondoCidade || 'Santos',
+      estado: newCondoEstado || 'SP',
       sindico: newCondoSindico || 'Sem Síndico Vinculado',
       unidades: newCondoUnidades,
       moradores: 0,
@@ -500,6 +511,7 @@ export default function AdminDashboardModal({
         nome: newC.nome,
         cnpj: newC.cnpj,
         endereco: newC.endereco,
+        bairro: newC.bairro,
         cidade: newC.cidade,
         estado: newC.estado,
         sindico: newC.sindico,
@@ -519,6 +531,10 @@ export default function AdminDashboardModal({
     setNewCondoName('');
     setNewCondoCnpj('');
     setNewCondoSindico('');
+    setNewCondoEndereco('');
+    setNewCondoBairro('');
+    setNewCondoCidade('');
+    setNewCondoEstado('');
   };
 
   const handleDeleteCondo = (id: string, name: string) => {
@@ -863,11 +879,29 @@ export default function AdminDashboardModal({
       return;
     }
 
+    setRoleTypeToDelete({ id, nome });
+    setIsConfirmDeleteRoleModalOpen(true);
+  };
+
+  const confirmDeleteRoleType = () => {
+    if (!roleTypeToDelete) return;
+    const { id, nome } = roleTypeToDelete;
+
     const updatedList = roleTypes.filter(rt => rt.id !== id);
     setRoleTypes(updatedList);
     localStorage.setItem('supabase_sim_role_types', JSON.stringify(updatedList));
     addAuditLog('EXCLUIR', 'perfis', `Excluído tipo de role: id=${id}, nome=${nome}`);
     onShowMessage("Sucesso", `Tipo de role "${nome}" removido com sucesso.`);
+
+    if (selectedRoleTypeId === id) {
+      setSelectedRoleTypeId(null);
+      setNewRoleTypeId('');
+      setNewRoleTypeNome('');
+      setNewRoleTypeDescricao('');
+    }
+
+    setIsConfirmDeleteRoleModalOpen(false);
+    setRoleTypeToDelete(null);
   };
 
   const handleCreateVisitor = (e: FormEvent) => {
@@ -1769,45 +1803,109 @@ export default function AdminDashboardModal({
                           <Plus className="w-4 h-4 text-emerald-500" /> Cadastrar Novo Condomínio Administrado
                         </h4>
                         
-                        <form onSubmit={handleCreateCondo} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase">Nome Fantasia *</label>
-                            <input
-                              type="text"
-                              required
-                              value={newCondoName}
-                              onChange={(e) => setNewCondoName(e.target.value)}
-                              placeholder="Residencial Miramar"
-                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                            />
+                        <form onSubmit={handleCreateCondo} className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase">Nome Fantasia *</label>
+                              <input
+                                type="text"
+                                required
+                                value={newCondoName}
+                                onChange={(e) => setNewCondoName(e.target.value)}
+                                placeholder="Residencial Miramar"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ Comercial</label>
+                              <input
+                                type="text"
+                                value={newCondoCnpj}
+                                onChange={(e) => setNewCondoCnpj(e.target.value)}
+                                placeholder="00.000.000/0001-00"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Designado</label>
+                              <input
+                                type="text"
+                                value={newCondoSindico}
+                                onChange={(e) => setNewCondoSindico(e.target.value)}
+                                placeholder="Nome do Síndico"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades Autônomas *</label>
+                              <input
+                                type="number"
+                                required
+                                min="1"
+                                value={newCondoUnidades}
+                                onChange={(e) => setNewCondoUnidades(Number(e.target.value || 0))}
+                                placeholder="60"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                              />
+                            </div>
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ Comercial</label>
-                            <input
-                              type="text"
-                              value={newCondoCnpj}
-                              onChange={(e) => setNewCondoCnpj(e.target.value)}
-                              placeholder="00.000.000/0001-00"
-                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                            />
+
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="space-y-1 md:col-span-2">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço *</label>
+                              <input
+                                type="text"
+                                required
+                                value={newCondoEndereco}
+                                onChange={(e) => setNewCondoEndereco(e.target.value)}
+                                placeholder="Ex: Av. Bartolomeu de Gusmão, 142"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro *</label>
+                              <input
+                                type="text"
+                                required
+                                value={newCondoBairro}
+                                onChange={(e) => setNewCondoBairro(e.target.value)}
+                                placeholder="Ex: Aparecida"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade *</label>
+                              <input
+                                type="text"
+                                required
+                                value={newCondoCidade}
+                                onChange={(e) => setNewCondoCidade(e.target.value)}
+                                placeholder="Ex: Santos"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                              />
+                            </div>
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Designado</label>
-                            <input
-                              type="text"
-                              value={newCondoSindico}
-                              onChange={(e) => setNewCondoSindico(e.target.value)}
-                              placeholder="Nome do Síndico"
-                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                            />
-                          </div>
-                          <div>
-                            <button
-                              type="submit"
-                              className="w-full bg-primary hover:bg-[#af101a] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer"
-                            >
-                              Adicionar Condomínio
-                            </button>
+
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase">Estado *</label>
+                              <input
+                                type="text"
+                                required
+                                value={newCondoEstado}
+                                onChange={(e) => setNewCondoEstado(e.target.value)}
+                                placeholder="Ex: SP"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                              />
+                            </div>
+                            <div className="md:col-span-3 text-right">
+                              <button
+                                type="submit"
+                                className="w-full md:w-auto px-8 bg-primary hover:bg-[#af101a] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer inline-block"
+                              >
+                                Cadastrar Condomínio
+                              </button>
+                            </div>
                           </div>
                         </form>
                       </div>
@@ -1819,36 +1917,61 @@ export default function AdminDashboardModal({
 
                     {/* Listings */}
                     <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left">
-                      <h4 className="text-xs font-extrabold text-secondary uppercase tracking-wider mb-4">Base Operativa de Condomínios</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {visibleCondos.map(item => (
-                          <div key={item.id} className="p-4 border border-gray-150 rounded-xl space-y-3 hover:border-gray-300 transition-colors">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h5 className="font-bold text-sm text-[#0f1b29]">{item.nome}</h5>
-                                <p className="text-[10px] text-gray-400">{item.cnpj}</p>
-                              </div>
-                              {activeProfile === 'admin' ? (
-                                <button
-                                  onClick={() => handleDeleteCondo(item.id, item.nome)}
-                                  className="text-red-650 hover:text-red-800 p-1 rounded hover:bg-red-50 text-xs"
-                                  title="Remover Imóvel"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              ) : (
-                                <span className="text-[9px] text-gray-400 bg-gray-100 p-1 rounded flex items-center gap-0.5"><Lock className="w-2.5 h-2.5" /> Lock</span>
-                              )}
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-2 text-[11px] text-secondary font-sans">
-                              <div>📍 {item.endereco}</div>
-                              <div>👤 Síndico: <strong className="font-semibold text-stone-800">{item.sindico}</strong></div>
-                              <div>🏢 {item.unidades} Unidades Autônomas</div>
-                              <div>📊 Inadimplência: <strong className="text-orange-600">{item.inadimplenciaPercent}%</strong></div>
-                            </div>
-                          </div>
-                        ))}
+                      <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider mb-4">Base Operativa de Condomínios</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
+                          <thead>
+                            <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase text-[9px]">
+                              <th className="py-2.5 px-2">Nome / CNPJ</th>
+                              <th className="py-2.5 px-2">Endereço</th>
+                              <th className="py-2.5 px-2">Bairro</th>
+                              <th className="py-2.5 px-2">Cidade / UF</th>
+                              <th className="py-2.5 px-2">Síndico</th>
+                              <th className="py-2.5 px-2">Unidades</th>
+                              <th className="py-2.5 px-2">Inadimplência</th>
+                              <th className="py-2.5 px-2">Status</th>
+                              <th className="py-2.5 px-2 text-right">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {visibleCondos.map(item => (
+                              <tr key={item.id} className="border-b border-gray-100 hover:bg-slate-50 transition-colors">
+                                <td className="py-3 px-2">
+                                  <div className="font-bold text-stone-850">{item.nome}</div>
+                                  <div className="text-[10px] text-gray-400">{item.cnpj}</div>
+                                </td>
+                                <td className="py-3 px-2 text-secondary">{item.endereco}</td>
+                                <td className="py-3 px-2 text-secondary font-semibold">{item.bairro || '-'}</td>
+                                <td className="py-3 px-2 text-secondary">{item.cidade} / {item.estado}</td>
+                                <td className="py-3 px-2 font-bold text-stone-800">{item.sindico}</td>
+                                <td className="py-3 px-2 font-mono text-stone-600 font-semibold">{item.unidades}</td>
+                                <td className="py-3 px-2 font-mono text-orange-600 font-semibold">{item.inadimplenciaPercent}%</td>
+                                <td className="py-3 px-2">
+                                  <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                    item.status === 'Normal' ? 'bg-emerald-50 text-emerald-600' :
+                                    item.status === 'Alerta' ? 'bg-amber-50 text-amber-600' :
+                                    'bg-red-50 text-red-650'
+                                  }`}>
+                                    {item.status}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-2 text-right">
+                                  {activeProfile === 'admin' ? (
+                                    <button
+                                      onClick={() => handleDeleteCondo(item.id, item.nome)}
+                                      className="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50 transition-colors cursor-pointer"
+                                      title="Remover Condomínio"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  ) : (
+                                    <span className="text-[9px] text-gray-400 bg-gray-100 px-2 py-1 rounded inline-flex items-center gap-0.5 select-none"><Lock className="w-2.5 h-2.5" /> Lock</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </div>
@@ -2426,18 +2549,29 @@ export default function AdminDashboardModal({
                                 {selectedRoleTypeId ? 'Salvar Papel' : 'Criar Papel'}
                               </button>
                               {selectedRoleTypeId && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedRoleTypeId(null);
-                                    setNewRoleTypeId('');
-                                    setNewRoleTypeNome('');
-                                    setNewRoleTypeDescricao('');
-                                  }}
-                                  className="bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold px-3 py-2.5 text-xs rounded-lg transition-transform active:scale-95 cursor-pointer text-center"
-                                >
-                                  Cancelar
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRoleType(selectedRoleTypeId, newRoleTypeNome)}
+                                    disabled={selectedRoleTypeId === 'administrador' || selectedRoleTypeId === 'admin'}
+                                    className="bg-red-50 hover:bg-red-100 text-red-650 font-bold px-3 py-2.5 text-xs rounded-lg transition-transform active:scale-95 cursor-pointer text-center disabled:opacity-40 disabled:cursor-not-allowed"
+                                    title={selectedRoleTypeId === 'administrador' || selectedRoleTypeId === 'admin' ? "Role básica do sistema" : "Excluir esta role"}
+                                  >
+                                    Excluir
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedRoleTypeId(null);
+                                      setNewRoleTypeId('');
+                                      setNewRoleTypeNome('');
+                                      setNewRoleTypeDescricao('');
+                                    }}
+                                    className="bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold px-3 py-2.5 text-xs rounded-lg transition-transform active:scale-95 cursor-pointer text-center"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </>
                               )}
                             </div>
                           </form>
@@ -2793,17 +2927,50 @@ export default function AdminDashboardModal({
 
       </div>
 
-        {/* MODAL FOOTER AND SYSTEM AUDIT DETAILS */}
-        <div className="bg-gray-55 border-t border-gray-150 px-6 py-4 md:px-8 flex flex-col sm:flex-row justify-between items-center text-[10px] text-gray-400 shrink-0 select-none gap-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span>Facilities Administração Condominial Santos &copy; 2026</span>
-            <span className="text-gray-300">|</span>
-            <span className="font-mono text-gray-500 font-semibold uppercase">STATUS RLS SISTEMA: ATIVO</span>
-          </div>
-          <div className="font-medium">
-            Desenvolvido sob protocolo seguro de RLS e Materialized SQL Views do PostgreSQL.
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE ROLE */}
+      {isConfirmDeleteRoleModalOpen && roleTypeToDelete && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#010811]/70 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-150 space-y-5">
+            <div className="flex items-start gap-4">
+              <div className="h-10 w-10 rounded-full bg-red-50 flex items-center justify-center text-red-600 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="text-left space-y-1.5">
+                <h3 className="text-sm font-extrabold text-[#0f1b29] uppercase tracking-wide">
+                  Confirmar Exclusão de Role
+                </h3>
+                <p className="text-xs text-secondary leading-relaxed">
+                  Tem certeza que deseja excluir o tipo de role <strong className="text-red-750 font-bold font-sans">"{roleTypeToDelete.nome}"</strong> (ID: {roleTypeToDelete.id})? Esta ação é irreversível e excluirá a role da base operativa de perfis do Supabase.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 rounded-2xl p-4 border border-amber-150 text-[11px] text-amber-800 leading-relaxed text-left">
+              <strong>Atenção:</strong> Certifique-se de que nenhum morador ou colaborador esteja associado a esta role. Do contrário, a alteração poderá ser bloqueada para preservar a integridade referencial dos dados.
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsConfirmDeleteRoleModalOpen(false);
+                  setRoleTypeToDelete(null);
+                }}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-all duration-150 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteRoleType}
+                className="px-5 py-2 bg-[#af101a] hover:bg-red-800 text-white text-xs font-bold rounded-xl transition-all duration-150 cursor-pointer"
+              >
+                Sim, Excluir Role
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
       </div>
     </div>
