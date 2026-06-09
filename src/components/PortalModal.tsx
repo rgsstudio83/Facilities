@@ -32,6 +32,38 @@ import { Boleto, Booking, Assembly, Ticket } from '../types';
 import { supabase, isSupabaseConfigured, saveSimulatedData, getSimulatedData } from '../lib/supabaseClient';
 import { usePortalRouter } from './PortalRouter';
 
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    try {
+      return crypto.randomUUID();
+    } catch (e) {
+      // Ignore and fallback
+    }
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+const formatCNPJ = (value: string): string => {
+  const clean = value.replace(/\D/g, '');
+  const limited = clean.slice(0, 14);
+  if (limited.length <= 2) return limited;
+  if (limited.length <= 5) return `${limited.slice(0, 2)}.${limited.slice(2)}`;
+  if (limited.length <= 8) return `${limited.slice(0, 2)}.${limited.slice(2, 5)}.${limited.slice(5)}`;
+  if (limited.length <= 12) return `${limited.slice(0, 2)}.${limited.slice(2, 5)}.${limited.slice(5, 8)}/${limited.slice(8)}`;
+  return `${limited.slice(0, 2)}.${limited.slice(2, 5)}.${limited.slice(5, 8)}/${limited.slice(8, 12)}-${limited.slice(12, 14)}`;
+};
+
+const formatCEP = (value: string): string => {
+  const clean = value.replace(/\D/g, '');
+  const limited = clean.slice(0, 8);
+  if (limited.length <= 5) return limited;
+  return `${limited.slice(0, 5)}-${limited.slice(5)}`;
+};
+
 interface PortalModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -42,6 +74,7 @@ interface PortalModalProps {
 export default function PortalModal({ isOpen, onClose, onShowNotification, onLoginSuccess }: PortalModalProps) {
   const router = usePortalRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showCondoForm, setShowCondoForm] = useState(false);
   const [username, setUsername] = useState('Roberto Silva');
   const [apartmentCode, setApartmentCode] = useState('Apto 41-B');
   const [loginEmail, setLoginEmail] = useState('');
@@ -137,8 +170,45 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [newCondoCnpj, setNewCondoCnpj] = useState('');
   const [newCondoSindico, setNewCondoSindico] = useState('');
   const [newCondoUnidades, setNewCondoUnidades] = useState(60);
+  const [newCondoCidade, setNewCondoCidade] = useState('Santos');
+  const [newCondoEstado, setNewCondoEstado] = useState('SP');
+  const [newCondoEndereco, setNewCondoEndereco] = useState('');
+  const [newCondoBairro, setNewCondoBairro] = useState('');
+  const [newCondoCep, setNewCondoCep] = useState('');
+  const [isFetchingCep, setIsFetchingCep] = useState(false);
+  const [cepError, setCepError] = useState('');
 
   const [newMoradorNome, setNewMoradorNome] = useState('');
+
+  const handleCepChange = async (cepValue: string) => {
+    const formatted = formatCEP(cepValue);
+    setNewCondoCep(formatted);
+    const cleanCep = formatted.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      setIsFetchingCep(true);
+      setCepError('');
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+        const data = await res.json();
+        if (data.erro) {
+          setCepError('CEP inválido.');
+        } else {
+          setNewCondoEndereco(data.logradouro || '');
+          setNewCondoBairro(data.bairro || '');
+          if (data.localidade) {
+            setNewCondoCidade(data.localidade);
+          }
+          if (data.uf) {
+            setNewCondoEstado(data.uf);
+          }
+        }
+      } catch (error) {
+        setCepError('Erro ao consultar CEP.');
+      } finally {
+        setIsFetchingCep(false);
+      }
+    }
+  };
   const [newMoradorCpf, setNewMoradorCpf] = useState('');
   const [newMoradorUnidade, setNewMoradorUnidade] = useState('');
   const [newMoradorCondoId, setNewMoradorCondoId] = useState('cd-1');
@@ -1829,103 +1899,257 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                       <h4 className="text-base font-bold text-[#101c29] font-display">Residenciais e Condomínios Integrados</h4>
                       <p className="text-xs text-secondary mt-0.5">Gerenciador de complexos habitacionais e empresariais parceiros Facilities.</p>
                     </div>
+                    <button
+                      onClick={() => setShowCondoForm(true)}
+                      className="bg-primary hover:bg-[#af101a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Cadastrar Condomínio
+                    </button>
                   </div>
 
-                  {/* Inline collapse form to create condo */}
-                  <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-sm space-y-4 text-left">
-                    <h5 className="text-xs font-bold text-[#101c29] uppercase tracking-wider flex items-center gap-2">
-                       Novo Condomínio
-                    </h5>
-                    <form onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!newCondoName || !newCondoCnpj) return;
-                      const newId = `cd-${Date.now()}`;
-                      const newObj = {
-                        id: newId,
-                        nome: newCondoName,
-                        cnpj: newCondoCnpj,
-                        endereco: 'Rua Principal, ' + (condos.length * 200 + 100),
-                        cidade: 'São Paulo',
-                        estado: 'SP',
-                        sindico: newCondoSindico || 'Administradora Facilities',
-                        unidades: Number(newCondoUnidades) || 80,
-                        moradores: Math.round(Number(newCondoUnidades) * 2.8) || 200,
-                        proprietarios: Math.round(Number(newCondoUnidades) * 0.95),
-                        receita: Number(newCondoUnidades) * 750,
-                        despesa: Number(newCondoUnidades) * 620,
-                        inadimplenciaPercent: 5.0,
-                        status: 'Normal'
-                      };
-                      setCondos(prev => [...prev, newObj]);
-                      
-                      if (isSupabaseConfigured && supabase) {
-                        supabase.from('condominios').insert({
-                          id: newObj.id,
-                          nome: newObj.nome,
-                          cnpj: newObj.cnpj,
-                          endereco: newObj.endereco,
-                          bairro: 'Centro',
-                          cidade: newObj.cidade,
-                          estado: newObj.estado,
-                          sindico: newObj.sindico,
-                          unidades: newObj.unidades,
-                          moradores: newObj.moradores,
-                          proprietarios: newObj.proprietarios,
-                          receita: newObj.receita,
-                          despesa: newObj.despesa,
-                          inadimplencia_percent: newObj.inadimplenciaPercent,
-                          status: newObj.status
-                        }).then(({ error }) => {
-                          if (error) console.error('Erro ao salvar condomínio no Supabase:', error.message);
-                        });
-                      }
+                  {/* Condo creation modal */}
+                  {showCondoForm && (
+                    <div id="modal-cadastro-condo-portal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-fade-in">
+                      <div className="bg-white w-full max-w-xl rounded-[28px] shadow-[0_24px_60px_-15px_rgba(0,0,0,0.35)] border border-gray-100 overflow-hidden flex flex-col max-h-[90vh]">
+                        {/* Modal Header */}
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                          <h4 className="text-xs font-extrabold text-[#101c29] uppercase tracking-wider flex items-center gap-2">
+                            <Plus className="w-4 h-4 text-[#af101a]" /> Novo Condomínio
+                          </h4>
+                          <button
+                            onClick={() => setShowCondoForm(false)}
+                            className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full transition-colors cursor-pointer border-0 bg-transparent"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
 
-                      addAuditLog('CRIAR', 'condominios', `Registrado condomínio ${newCondoName} com ${newCondoUnidades} unidades.`);
-                      onShowNotification('Sucesso!', `Condomínio ${newCondoName} foi adicionado à base.`);
-                      setNewCondoName('');
-                      setNewCondoCnpj('');
-                      setNewCondoSindico('');
-                    }} className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
-                      <input
-                        type="text"
-                        required
-                        placeholder="Nome do Condomínio"
-                        value={newCondoName}
-                        onChange={(e) => setNewCondoName(e.target.value)}
-                        className="bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                      />
-                      <input
-                        type="text"
-                        required
-                        placeholder="CNPJ"
-                        value={newCondoCnpj}
-                        onChange={(e) => setNewCondoCnpj(e.target.value)}
-                        className="bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Síndico Responsável"
-                        value={newCondoSindico}
-                        onChange={(e) => setNewCondoSindico(e.target.value)}
-                        className="bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                      />
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          placeholder="Unidades"
-                          value={newCondoUnidades}
-                          onChange={(e) => setNewCondoUnidades(Number(e.target.value))}
-                          className="bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] w-24"
-                        />
-                        <button
-                          type="submit"
-                          className="flex-1 bg-[#af101a] hover:bg-[#900e15] text-white font-bold rounded-lg text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                        >
-                          Incluir
-                        </button>
+                        {/* Modal Body */}
+                        <div className="p-6 overflow-y-auto space-y-4 text-left">
+                          <form onSubmit={(e) => {
+                            e.preventDefault();
+                            
+                            const nameTrimmed = newCondoName.trim();
+                            if (!nameTrimmed) {
+                              onShowNotification('Erro de Validação', 'Por favor, informe o Nome do Condomínio.');
+                              return;
+                            }
+                            
+                            const cnpjCleaned = newCondoCnpj.replace(/\D/g, '');
+                            if (!cnpjCleaned) {
+                              onShowNotification('Erro de Validação', 'Por favor, informe o CNPJ do Condomínio.');
+                              return;
+                            }
+                            if (cnpjCleaned.length !== 14) {
+                              onShowNotification('CNPJ Inválido', 'O CNPJ deve conter exatamente 14 números.');
+                              return;
+                            }
+
+                            const cepCleaned = newCondoCep.replace(/\D/g, '');
+                            if (!cepCleaned) {
+                              onShowNotification('Erro de Validação', 'Por favor, informe o CEP do Condomínio.');
+                              return;
+                            }
+                            if (cepCleaned.length !== 8) {
+                              onShowNotification('CEP Inválido', 'O CEP deve conter exatamente 8 números (exemplo: 11000-000).');
+                              return;
+                            }
+
+                            const newId = generateUUID();
+                            const newObj = {
+                              id: newId,
+                              nome: newCondoName,
+                              cnpj: newCondoCnpj,
+                              endereco: newCondoEndereco || ('Av. Ana Costa, 142'),
+                              bairro: newCondoBairro || 'Gonzaga',
+                              cidade: newCondoCidade || 'Santos',
+                              estado: newCondoEstado || 'SP',
+                              sindico: newCondoSindico || 'Administradora Facilities',
+                              unidades: Number(newCondoUnidades) || 80,
+                              moradores: Math.round(Number(newCondoUnidades || 80) * 2.8),
+                              proprietarios: Math.round(Number(newCondoUnidades || 80) * 0.95),
+                              receita: Number(newCondoUnidades || 80) * 750,
+                              despesa: Number(newCondoUnidades || 80) * 620,
+                              inadimplenciaPercent: 5.0,
+                              status: 'Normal'
+                            };
+                            setCondos(prev => [...prev, newObj]);
+                            
+                            if (isSupabaseConfigured && supabase) {
+                              supabase.from('condominios').insert({
+                                id: newObj.id,
+                                nome: newObj.nome,
+                                cnpj: newObj.cnpj,
+                                endereco: newObj.endereco,
+                                bairro: newObj.bairro,
+                                cidade: newObj.cidade,
+                                estado: newObj.estado,
+                                sindico: newObj.sindico,
+                                unidades: newObj.unidades,
+                                moradores: newObj.moradores,
+                                proprietarios: newObj.proprietarios,
+                                receita: newObj.receita,
+                                despesa: newObj.despesa,
+                                inadimplencia_percent: newObj.inadimplenciaPercent,
+                                status: newObj.status
+                              }).then(({ error }) => {
+                                if (error) console.error('Erro ao salvar condomínio no Supabase:', error.message);
+                              });
+                            }
+
+                            addAuditLog('CRIAR', 'condominios', `Registrado condomínio ${newCondoName} com ${newCondoUnidades} unidades.`);
+                            onShowNotification('Sucesso!', `Condomínio ${newCondoName} foi adicionado à base.`);
+                            setNewCondoName('');
+                            setNewCondoCnpj('');
+                            setNewCondoSindico('');
+                            setNewCondoCidade('Santos');
+                            setNewCondoEstado('SP');
+                            setNewCondoEndereco('');
+                            setNewCondoBairro('');
+                            setNewCondoCep('');
+                            setCepError('');
+                            setIsFetchingCep(false);
+                            setShowCondoForm(false);
+                          }} className="space-y-4">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase">Nome do Condomínio *</label>
+                              <input
+                                type="text"
+                                placeholder="Residencial Miramar"
+                                value={newCondoName}
+                                onChange={(e) => setNewCondoName(e.target.value)}
+                                className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ *</label>
+                              <input
+                                type="text"
+                                placeholder="00.000.000/0001-00"
+                                value={newCondoCnpj}
+                                onChange={(e) => setNewCondoCnpj(formatCNPJ(e.target.value))}
+                                maxLength={18}
+                                className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Responsável</label>
+                                <input
+                                  type="text"
+                                  placeholder="Nome do Síndico"
+                                  value={newCondoSindico}
+                                  onChange={(e) => setNewCondoSindico(e.target.value)}
+                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades</label>
+                                <input
+                                  type="number"
+                                  placeholder="80"
+                                  value={newCondoUnidades || ''}
+                                  onChange={(e) => setNewCondoUnidades(Number(e.target.value))}
+                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                />
+                              </div>
+                            </div>
+
+                             <div className="space-y-1">
+                               <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between items-center">
+                                 <span>CEP *</span>
+                                 {isFetchingCep && <span className="text-[9px] text-blue-500 animate-pulse font-medium">Buscando endereço...</span>}
+                                 {cepError && <span className="text-[9px] text-[#af101a] font-medium">{cepError}</span>}
+                               </label>
+                               <input
+                                 type="text"
+                                 maxLength={9}
+                                 placeholder="00000-000"
+                                 value={newCondoCep}
+                                 onChange={(e) => handleCepChange(e.target.value)}
+                                 className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
+                               />
+                             </div>
+
+                             <div className="space-y-1">
+                               <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço</label>
+                               <input
+                                 type="text"
+                                 placeholder="Ex: Av. Ana Costa, 142"
+                                 value={newCondoEndereco}
+                                 onChange={(e) => setNewCondoEndereco(e.target.value)}
+                                 className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                               />
+                             </div>
+
+                             <div className="grid grid-cols-3 gap-4">
+                               <div className="space-y-1">
+                                 <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro</label>
+                                 <input
+                                   type="text"
+                                   placeholder="Ex: Gonzaga"
+                                   value={newCondoBairro}
+                                   onChange={(e) => setNewCondoBairro(e.target.value)}
+                                   className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                 />
+                               </div>
+
+                               <div className="space-y-1">
+                                 <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade</label>
+                                 <select
+                                   value={newCondoCidade}
+                                   onChange={(e) => setNewCondoCidade(e.target.value)}
+                                   className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
+                                 >
+                                   <option value="">Selecione...</option>
+                                   <option value="Santos">Santos</option>
+                                   <option value="São Vicente">São Vicente</option>
+                                   <option value="Praia Grande">Praia Grande</option>
+                                   <option value="Guarujá">Guarujá</option>
+                                   {newCondoCidade && !["Santos", "São Vicente", "Praia Grande", "Guarujá"].includes(newCondoCidade) && (
+                                     <option value={newCondoCidade}>{newCondoCidade}</option>
+                                   )}
+                                 </select>
+                               </div>
+
+                               <div className="space-y-1">
+                                 <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
+                                 <select
+                                   value={newCondoEstado}
+                                   onChange={(e) => setNewCondoEstado(e.target.value)}
+                                   className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
+                                 >
+                                   <option value="SP">São Paulo (SP)</option>
+                                   {newCondoEstado && newCondoEstado !== 'SP' && (
+                                     <option value={newCondoEstado}>{newCondoEstado}</option>
+                                   )}
+                                 </select>
+                               </div>
+                             </div>
+
+                            <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setShowCondoForm(false)}
+                                className="px-5 py-2.5 border border-gray-200 text-stone-600 text-xs font-bold rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="submit"
+                                className="px-6 bg-[#af101a] hover:bg-[#900e15] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer"
+                              >
+                                Cadastrar
+                              </button>
+                            </div>
+                          </form>
+                        </div>
                       </div>
-                    </form>
-                  </div>
+                    </div>
+                  )}
 
                    {/* Condominios List Representation */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

@@ -41,6 +41,38 @@ import {
 import { supabase, isSupabaseConfigured, supabaseUrl, supabaseAnonKey } from '../lib/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
 
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    try {
+      return crypto.randomUUID();
+    } catch (e) {
+      // Ignore and fallback
+    }
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+const formatCNPJ = (value: string): string => {
+  const clean = value.replace(/\D/g, '');
+  const limited = clean.slice(0, 14);
+  if (limited.length <= 2) return limited;
+  if (limited.length <= 5) return `${limited.slice(0, 2)}.${limited.slice(2)}`;
+  if (limited.length <= 8) return `${limited.slice(0, 2)}.${limited.slice(2, 5)}.${limited.slice(5)}`;
+  if (limited.length <= 12) return `${limited.slice(0, 2)}.${limited.slice(2, 5)}.${limited.slice(5, 8)}/${limited.slice(8)}`;
+  return `${limited.slice(0, 2)}.${limited.slice(2, 5)}.${limited.slice(5, 8)}/${limited.slice(8, 12)}-${limited.slice(12, 14)}`;
+};
+
+const formatCEP = (value: string): string => {
+  const clean = value.replace(/\D/g, '');
+  const limited = clean.slice(0, 8);
+  if (limited.length <= 5) return limited;
+  return `${limited.slice(0, 5)}-${limited.slice(5)}`;
+};
+
 interface AdminDashboardModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -186,7 +218,10 @@ export default function AdminDashboardModal({
   const [newCondoEndereco, setNewCondoEndereco] = useState('');
   const [newCondoBairro, setNewCondoBairro] = useState('');
   const [newCondoCidade, setNewCondoCidade] = useState('');
-  const [newCondoEstado, setNewCondoEstado] = useState('');
+  const [newCondoEstado, setNewCondoEstado] = useState('SP');
+  const [newCondoCep, setNewCondoCep] = useState('');
+  const [isFetchingCep, setIsFetchingCep] = useState(false);
+  const [cepError, setCepError] = useState('');
   const [showCondoForm, setShowCondoForm] = useState(false);
   const [showMoradorForm, setShowMoradorForm] = useState(false);
   const [showProfileForm, setShowProfileForm] = useState(false);
@@ -584,22 +619,83 @@ export default function AdminDashboardModal({
     return true;
   };
 
+  const handleCepChange = async (cepValue: string) => {
+    const formatted = formatCEP(cepValue);
+    setNewCondoCep(formatted);
+    const cleanCep = formatted.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      setIsFetchingCep(true);
+      setCepError('');
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+        const data = await res.json();
+        if (data.erro) {
+          setCepError('CEP inválido.');
+        } else {
+          setNewCondoEndereco(data.logradouro || '');
+          setNewCondoBairro(data.bairro || '');
+          if (data.localidade) {
+            setNewCondoCidade(data.localidade);
+          }
+          if (data.uf) {
+            setNewCondoEstado(data.uf);
+          }
+        }
+      } catch (error) {
+        setCepError('Erro ao consultar CEP.');
+      } finally {
+        setIsFetchingCep(false);
+      }
+    }
+  };
+
   // CRUD actions
   const handleCreateCondo = async (e: FormEvent) => {
     e.preventDefault();
     if (!verifyWritePermission(['admin'], 'Criar Condomínio')) return;
-    if (!newCondoName.trim()) return;
+    
+    const nameTrimmed = newCondoName.trim();
+    if (!nameTrimmed) {
+      onShowMessage("Erro de Validação", "Por favor, indique o Nome Fantasia do condomínio.");
+      return;
+    }
+
+    const cnpjCleaned = newCondoCnpj.replace(/\D/g, '');
+    if (!cnpjCleaned) {
+      onShowMessage("Erro de Validação", "Por favor, indique o CNPJ comercial do condomínio.");
+      return;
+    }
+    if (cnpjCleaned.length !== 14) {
+      onShowMessage("Erro de Validação", "O CNPJ do condomínio deve conter exatamente 14 números.");
+      return;
+    }
+
+    const cepCleaned = newCondoCep.replace(/\D/g, '');
+    if (!cepCleaned) {
+      onShowMessage("Erro de Validação", "Por favor, indique o CEP do condomínio.");
+      return;
+    }
+    if (cepCleaned.length !== 8) {
+      onShowMessage("Erro de Validação", "O CEP deve obter exatamente 8 números (exemplo: 11000-000).");
+      return;
+    }
+
+    const cleanedCnpj = newCondoCnpj.trim();
+    const finalEndereco = newCondoEndereco.trim() || 'Av. Bartolomeu de Gusmão, 142';
+    const finalBairro = newCondoBairro.trim() || 'Aparecida';
+    const finalCidade = newCondoCidade.trim() || 'Santos';
+    const finalEstado = newCondoEstado.trim() || 'SP';
 
     const newC: Condominio = {
-      id: `cd-${Date.now()}`,
+      id: generateUUID(),
       nome: newCondoName,
-      cnpj: newCondoCnpj || '00.000.000/0001-00',
-      endereco: newCondoEndereco || 'Rua Comercial de Santos',
-      bairro: newCondoBairro || 'Centro',
-      cidade: newCondoCidade || 'Santos',
-      estado: newCondoEstado || 'SP',
-      sindico: newCondoSindico || 'Sem Síndico Vinculado',
-      unidades: newCondoUnidades,
+      cnpj: cleanedCnpj,
+      endereco: finalEndereco,
+      bairro: finalBairro,
+      cidade: finalCidade,
+      estado: finalEstado,
+      sindico: newCondoSindico.trim() || 'Sem Síndico Vinculado',
+      unidades: Number(newCondoUnidades) || 60,
       moradores: 0,
       proprietarios: 0,
       receita: 0,
@@ -658,7 +754,10 @@ export default function AdminDashboardModal({
     setNewCondoEndereco('');
     setNewCondoBairro('');
     setNewCondoCidade('');
-    setNewCondoEstado('');
+    setNewCondoEstado('SP');
+    setNewCondoCep('');
+    setCepError('');
+    setIsFetchingCep(false);
     setShowCondoForm(false);
   };
 
@@ -1981,133 +2080,172 @@ export default function AdminDashboardModal({
                     {activeProfile === 'admin' && (
                       <div className="flex justify-between items-center bg-white p-4 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)]">
                         <span className="text-stone-500 text-xs font-sans">
-                          {showCondoForm 
-                            ? 'Preencha o formulário para adicionar um novo condomínio.' 
-                            : 'Gerencie ou cadastre novos condomínios na base central.'}
+                          Gerencie ou cadastre novos condomínios na base central.
                         </span>
                         <button
-                          onClick={() => setShowCondoForm(!showCondoForm)}
+                          onClick={() => setShowCondoForm(true)}
                           className="bg-primary hover:bg-[#af101a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs"
                         >
-                          <Plus className={`w-4 h-4 transition-transform duration-200 ${showCondoForm ? 'rotate-45' : ''}`} />
-                          {showCondoForm ? 'Ocultar Formulário' : 'Cadastrar Condomínio'}
+                          <Plus className="w-4 h-4" />
+                          Cadastrar Condomínio
                         </button>
                       </div>
                     )}
 
-                    {/* Add condo form - available for admin */}
+                    {/* Add condo modal form - available for admin */}
                     {activeProfile === 'admin' ? (
                       showCondoForm && (
-                        <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left space-y-4">
-                          <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1">
-                            <Plus className="w-4 h-4 text-emerald-500" /> Cadastrar Novo Condomínio Administrado
-                          </h4>
-                          
-                          <form onSubmit={handleCreateCondo} className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Nome Fantasia *</label>
-                                <input
-                                  type="text"
-                                  required
-                                  value={newCondoName}
-                                  onChange={(e) => setNewCondoName(e.target.value)}
-                                  placeholder="Residencial Miramar"
-                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ Comercial</label>
-                                <input
-                                  type="text"
-                                  value={newCondoCnpj}
-                                  onChange={(e) => setNewCondoCnpj(e.target.value)}
-                                  placeholder="00.000.000/0001-00"
-                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Designado</label>
-                                <input
-                                  type="text"
-                                  value={newCondoSindico}
-                                  onChange={(e) => setNewCondoSindico(e.target.value)}
-                                  placeholder="Nome do Síndico"
-                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades Autônomas *</label>
-                                <input
-                                  type="number"
-                                  required
-                                  min="1"
-                                  value={newCondoUnidades}
-                                  onChange={(e) => setNewCondoUnidades(Number(e.target.value || 0))}
-                                  placeholder="60"
-                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                                />
-                              </div>
+                        <div id="modal-cadastro-condo" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-fade-in">
+                          <div className="bg-white w-full max-w-2xl rounded-[28px] shadow-[0_24px_60px_-15px_rgba(0,0,0,0.35)] border border-gray-100 overflow-hidden flex flex-col max-h-[90vh]">
+                            {/* Modal Header */}
+                            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                              <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-2">
+                                <Plus className="w-4 h-4 text-emerald-500" /> Cadastrar Novo Condomínio Administrado
+                              </h4>
+                              <button
+                                onClick={() => setShowCondoForm(false)}
+                                className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full transition-colors cursor-pointer border-0 bg-transparent"
+                              >
+                                <X className="w-5 h-5" />
+                              </button>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                              <div className="space-y-1 md:col-span-2">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço *</label>
-                                <input
-                                  type="text"
-                                  required
-                                  value={newCondoEndereco}
-                                  onChange={(e) => setNewCondoEndereco(e.target.value)}
-                                  placeholder="Ex: Av. Bartolomeu de Gusmão, 142"
-                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro *</label>
-                                <input
-                                  type="text"
-                                  required
-                                  value={newCondoBairro}
-                                  onChange={(e) => setNewCondoBairro(e.target.value)}
-                                  placeholder="Ex: Aparecida"
-                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade *</label>
-                                <input
-                                  type="text"
-                                  required
-                                  value={newCondoCidade}
-                                  onChange={(e) => setNewCondoCidade(e.target.value)}
-                                  placeholder="Ex: Santos"
-                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                                />
-                              </div>
-                            </div>
+                            {/* Modal Body with scrollable form */}
+                            <div className="p-6 overflow-y-auto space-y-4 text-left">
+                              <form onSubmit={handleCreateCondo} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Nome Fantasia *</label>
+                                    <input
+                                      type="text"
+                                      value={newCondoName}
+                                      onChange={(e) => setNewCondoName(e.target.value)}
+                                      placeholder="Residencial Miramar"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ Comercial *</label>
+                                    <input
+                                      type="text"
+                                      value={newCondoCnpj}
+                                      onChange={(e) => setNewCondoCnpj(formatCNPJ(e.target.value))}
+                                      placeholder="00.000.000/0001-00"
+                                      maxLength={18}
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-mono"
+                                    />
+                                  </div>
+                                </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Estado *</label>
-                                <input
-                                  type="text"
-                                  required
-                                  value={newCondoEstado}
-                                  onChange={(e) => setNewCondoEstado(e.target.value)}
-                                  placeholder="Ex: SP"
-                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                                />
-                              </div>
-                              <div className="md:col-span-3 text-right">
-                                <button
-                                  type="submit"
-                                  className="w-full md:w-auto px-8 bg-primary hover:bg-[#af101a] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer inline-block"
-                                >
-                                  Cadastrar Condomínio
-                                </button>
-                              </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Designado</label>
+                                    <input
+                                      type="text"
+                                      value={newCondoSindico}
+                                      onChange={(e) => setNewCondoSindico(e.target.value)}
+                                      placeholder="Nome do Síndico"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades Autônomas</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={newCondoUnidades || ''}
+                                      onChange={(e) => setNewCondoUnidades(Number(e.target.value || 0))}
+                                      placeholder="60"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between items-center">
+                                    <span>CEP *</span>
+                                    {isFetchingCep && <span className="text-[9px] text-blue-500 animate-pulse font-medium">Buscando endereço...</span>}
+                                    {cepError && <span className="text-[9px] text-[#af101a] font-medium">{cepError}</span>}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    maxLength={9}
+                                    value={newCondoCep}
+                                    onChange={(e) => handleCepChange(e.target.value)}
+                                    placeholder="00000-000"
+                                    className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-mono mb-3"
+                                  />
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço</label>
+                                  <input
+                                    type="text"
+                                    value={newCondoEndereco}
+                                    onChange={(e) => setNewCondoEndereco(e.target.value)}
+                                    placeholder="Ex: Av. Bartolomeu de Gusmão, 142"
+                                    className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                  />
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro</label>
+                                    <input
+                                      type="text"
+                                      value={newCondoBairro}
+                                      onChange={(e) => setNewCondoBairro(e.target.value)}
+                                      placeholder="Ex: Aparecida"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade</label>
+                                    <select
+                                      value={newCondoCidade}
+                                      onChange={(e) => setNewCondoCidade(e.target.value)}
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none cursor-pointer"
+                                    >
+                                      <option value="">Selecione...</option>
+                                      <option value="Santos">Santos</option>
+                                      <option value="São Vicente">São Vicente</option>
+                                      <option value="Praia Grande">Praia Grande</option>
+                                      <option value="Guarujá">Guarujá</option>
+                                      {newCondoCidade && !["Santos", "São Vicente", "Praia Grande", "Guarujá"].includes(newCondoCidade) && (
+                                        <option value={newCondoCidade}>{newCondoCidade}</option>
+                                      )}
+                                    </select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
+                                    <select
+                                      value={newCondoEstado}
+                                      onChange={(e) => setNewCondoEstado(e.target.value)}
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none cursor-pointer"
+                                    >
+                                      <option value="SP">São Paulo (SP)</option>
+                                      {newCondoEstado && newCondoEstado !== 'SP' && (
+                                        <option value={newCondoEstado}>{newCondoEstado}</option>
+                                      )}
+                                    </select>
+                                  </div>
+                                </div>
+
+                                <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowCondoForm(false)}
+                                    className="px-5 py-2.5 border border-gray-200 text-stone-600 text-xs font-bold rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    type="submit"
+                                    className="px-6 bg-primary hover:bg-[#af101a] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer"
+                                  >
+                                    Cadastrar Condomínio
+                                  </button>
+                                </div>
+                              </form>
                             </div>
-                          </form>
+                          </div>
                         </div>
                       )
                     ) : (
