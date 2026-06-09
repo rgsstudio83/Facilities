@@ -2012,41 +2012,105 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                             setIsFetchingCep(false);
                             setShowCondoForm(false);
                           }} className="space-y-4">
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-400 uppercase">Nome do Condomínio *</label>
-                              <input
-                                type="text"
-                                placeholder="Residencial Miramar"
-                                value={newCondoName}
-                                onChange={(e) => setNewCondoName(e.target.value)}
-                                className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                              />
-                            </div>
-
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ *</label>
-                              <input
-                                type="text"
-                                placeholder="00.000.000/0001-00"
-                                value={newCondoCnpj}
-                                onChange={(e) => setNewCondoCnpj(formatCNPJ(e.target.value))}
-                                maxLength={18}
-                                className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Responsável</label>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="space-y-1 md:col-span-2">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Nome do Condomínio *</label>
                                 <input
                                   type="text"
-                                  placeholder="Nome do Síndico"
-                                  value={newCondoSindico}
-                                  onChange={(e) => setNewCondoSindico(e.target.value)}
+                                  placeholder="Residencial Miramar"
+                                  value={newCondoName}
+                                  onChange={(e) => setNewCondoName(e.target.value)}
                                   className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
                                 />
                               </div>
-                              <div className="space-y-1">
+
+                              <div className="space-y-1 md:col-span-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ *</label>
+                                <input
+                                  type="text"
+                                  placeholder="00.000.000/0001-00"
+                                  value={newCondoCnpj}
+                                  onChange={(e) => setNewCondoCnpj(formatCNPJ(e.target.value))}
+                                  maxLength={18}
+                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="space-y-1 md:col-span-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between items-center">
+                                  <span>CEP *</span>
+                                  {isFetchingCep && <span className="text-[9px] text-blue-500 animate-pulse font-medium">Buscando endereço...</span>}
+                                  {cepError && <span className="text-[9px] text-[#af101a] font-medium">{cepError}</span>}
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={9}
+                                  placeholder="00000-000"
+                                  value={newCondoCep}
+                                  onChange={(e) => handleCepChange(e.target.value)}
+                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
+                                />
+                              </div>
+
+                              <div className="space-y-1 md:col-span-2">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço</label>
+                                <input
+                                  type="text"
+                                  placeholder="Ex: Av. Ana Costa, 142"
+                                  value={newCondoEndereco}
+                                  onChange={(e) => setNewCondoEndereco(e.target.value)}
+                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                              <div className="space-y-1 col-span-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro</label>
+                                <input
+                                  type="text"
+                                  placeholder="Ex: Gonzaga"
+                                  value={newCondoBairro}
+                                  onChange={(e) => setNewCondoBairro(e.target.value)}
+                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                                />
+                              </div>
+
+                              <div className="space-y-1 col-span-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade</label>
+                                <select
+                                  value={newCondoCidade}
+                                  onChange={(e) => setNewCondoCidade(e.target.value)}
+                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
+                                >
+                                  <option value="">Selecione...</option>
+                                  <option value="Santos">Santos</option>
+                                  <option value="São Vicente">São Vicente</option>
+                                  <option value="Praia Grande">Praia Grande</option>
+                                  <option value="Guarujá">Guarujá</option>
+                                  {newCondoCidade && !["Santos", "São Vicente", "Praia Grande", "Guarujá"].includes(newCondoCidade) && (
+                                    <option value={newCondoCidade}>{newCondoCidade}</option>
+                                  )}
+                                </select>
+                              </div>
+
+                              <div className="space-y-1 col-span-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
+                                <select
+                                  value={newCondoEstado}
+                                  onChange={(e) => setNewCondoEstado(e.target.value)}
+                                  className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
+                                >
+                                  <option value="SP">São Paulo (SP)</option>
+                                  {newCondoEstado && newCondoEstado !== 'SP' && (
+                                    <option value={newCondoEstado}>{newCondoEstado}</option>
+                                  )}
+                                </select>
+                              </div>
+
+                              <div className="space-y-1 col-span-1">
                                 <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades</label>
                                 <input
                                   type="number"
@@ -2057,78 +2121,6 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                                 />
                               </div>
                             </div>
-
-                             <div className="space-y-1">
-                               <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between items-center">
-                                 <span>CEP *</span>
-                                 {isFetchingCep && <span className="text-[9px] text-blue-500 animate-pulse font-medium">Buscando endereço...</span>}
-                                 {cepError && <span className="text-[9px] text-[#af101a] font-medium">{cepError}</span>}
-                               </label>
-                               <input
-                                 type="text"
-                                 maxLength={9}
-                                 placeholder="00000-000"
-                                 value={newCondoCep}
-                                 onChange={(e) => handleCepChange(e.target.value)}
-                                 className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
-                               />
-                             </div>
-
-                             <div className="space-y-1">
-                               <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço</label>
-                               <input
-                                 type="text"
-                                 placeholder="Ex: Av. Ana Costa, 142"
-                                 value={newCondoEndereco}
-                                 onChange={(e) => setNewCondoEndereco(e.target.value)}
-                                 className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                               />
-                             </div>
-
-                             <div className="grid grid-cols-3 gap-4">
-                               <div className="space-y-1">
-                                 <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro</label>
-                                 <input
-                                   type="text"
-                                   placeholder="Ex: Gonzaga"
-                                   value={newCondoBairro}
-                                   onChange={(e) => setNewCondoBairro(e.target.value)}
-                                   className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                                 />
-                               </div>
-
-                               <div className="space-y-1">
-                                 <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade</label>
-                                 <select
-                                   value={newCondoCidade}
-                                   onChange={(e) => setNewCondoCidade(e.target.value)}
-                                   className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
-                                 >
-                                   <option value="">Selecione...</option>
-                                   <option value="Santos">Santos</option>
-                                   <option value="São Vicente">São Vicente</option>
-                                   <option value="Praia Grande">Praia Grande</option>
-                                   <option value="Guarujá">Guarujá</option>
-                                   {newCondoCidade && !["Santos", "São Vicente", "Praia Grande", "Guarujá"].includes(newCondoCidade) && (
-                                     <option value={newCondoCidade}>{newCondoCidade}</option>
-                                   )}
-                                 </select>
-                               </div>
-
-                               <div className="space-y-1">
-                                 <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
-                                 <select
-                                   value={newCondoEstado}
-                                   onChange={(e) => setNewCondoEstado(e.target.value)}
-                                   className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
-                                 >
-                                   <option value="SP">São Paulo (SP)</option>
-                                   {newCondoEstado && newCondoEstado !== 'SP' && (
-                                     <option value={newCondoEstado}>{newCondoEstado}</option>
-                                   )}
-                                 </select>
-                               </div>
-                             </div>
 
                             <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
                               <button

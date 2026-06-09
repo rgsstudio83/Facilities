@@ -2113,8 +2113,8 @@ export default function AdminDashboardModal({
                             {/* Modal Body with scrollable form */}
                             <div className="p-6 overflow-y-auto space-y-4 text-left">
                               <form onSubmit={handleCreateCondo} className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div className="space-y-1">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="space-y-1 md:col-span-2">
                                     <label className="text-[10px] font-bold text-gray-400 uppercase">Nome Fantasia *</label>
                                     <input
                                       type="text"
@@ -2124,7 +2124,7 @@ export default function AdminDashboardModal({
                                       className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
                                     />
                                   </div>
-                                  <div className="space-y-1">
+                                  <div className="space-y-1 md:col-span-1">
                                     <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ Comercial *</label>
                                     <input
                                       type="text"
@@ -2137,56 +2137,36 @@ export default function AdminDashboardModal({
                                   </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Designado</label>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className="space-y-1 md:col-span-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between items-center">
+                                      <span>CEP *</span>
+                                      {isFetchingCep && <span className="text-[9px] text-blue-500 animate-pulse font-medium">Buscando endereço...</span>}
+                                      {cepError && <span className="text-[9px] text-[#af101a] font-medium">{cepError}</span>}
+                                    </label>
                                     <input
                                       type="text"
-                                      value={newCondoSindico}
-                                      onChange={(e) => setNewCondoSindico(e.target.value)}
-                                      placeholder="Nome do Síndico"
-                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                      maxLength={9}
+                                      value={newCondoCep}
+                                      onChange={(e) => handleCepChange(e.target.value)}
+                                      placeholder="00000-000"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-mono"
                                     />
                                   </div>
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades Autônomas</label>
+                                  <div className="space-y-1 md:col-span-2">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço</label>
                                     <input
-                                      type="number"
-                                      min="1"
-                                      value={newCondoUnidades || ''}
-                                      onChange={(e) => setNewCondoUnidades(Number(e.target.value || 0))}
-                                      placeholder="60"
+                                      type="text"
+                                      value={newCondoEndereco}
+                                      onChange={(e) => setNewCondoEndereco(e.target.value)}
+                                      placeholder="Ex: Av. Bartolomeu de Gusmão, 142"
                                       className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
                                     />
                                   </div>
                                 </div>
 
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between items-center">
-                                    <span>CEP *</span>
-                                    {isFetchingCep && <span className="text-[9px] text-blue-500 animate-pulse font-medium">Buscando endereço...</span>}
-                                    {cepError && <span className="text-[9px] text-[#af101a] font-medium">{cepError}</span>}
-                                  </label>
-                                  <input
-                                    type="text"
-                                    maxLength={9}
-                                    value={newCondoCep}
-                                    onChange={(e) => handleCepChange(e.target.value)}
-                                    placeholder="00000-000"
-                                    className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-mono mb-3"
-                                  />
-                                  <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço</label>
-                                  <input
-                                    type="text"
-                                    value={newCondoEndereco}
-                                    onChange={(e) => setNewCondoEndereco(e.target.value)}
-                                    placeholder="Ex: Av. Bartolomeu de Gusmão, 142"
-                                    className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                                  />
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                  <div className="space-y-1">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                  <div className="space-y-1 col-span-1">
                                     <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro</label>
                                     <input
                                       type="text"
@@ -2196,7 +2176,7 @@ export default function AdminDashboardModal({
                                       className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
                                     />
                                   </div>
-                                  <div className="space-y-1">
+                                  <div className="space-y-1 col-span-1">
                                     <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade</label>
                                     <select
                                       value={newCondoCidade}
@@ -2213,7 +2193,7 @@ export default function AdminDashboardModal({
                                       )}
                                     </select>
                                   </div>
-                                  <div className="space-y-1">
+                                  <div className="space-y-1 col-span-1">
                                     <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
                                     <select
                                       value={newCondoEstado}
@@ -2225,6 +2205,17 @@ export default function AdminDashboardModal({
                                         <option value={newCondoEstado}>{newCondoEstado}</option>
                                       )}
                                     </select>
+                                  </div>
+                                  <div className="space-y-1 col-span-1">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades Autônomas</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={newCondoUnidades || ''}
+                                      onChange={(e) => setNewCondoUnidades(Number(e.target.value || 0))}
+                                      placeholder="60"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                    />
                                   </div>
                                 </div>
 
