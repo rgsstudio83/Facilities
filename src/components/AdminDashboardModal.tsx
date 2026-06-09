@@ -585,7 +585,7 @@ export default function AdminDashboardModal({
   };
 
   // CRUD actions
-  const handleCreateCondo = (e: FormEvent) => {
+  const handleCreateCondo = async (e: FormEvent) => {
     e.preventDefault();
     if (!verifyWritePermission(['admin'], 'Criar Condomínio')) return;
     if (!newCondoName.trim()) return;
@@ -608,6 +608,38 @@ export default function AdminDashboardModal({
       status: 'Normal'
     };
 
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from('condominios').insert({
+          id: newC.id,
+          nome: newC.nome,
+          cnpj: newC.cnpj,
+          endereco: newC.endereco,
+          bairro: newC.bairro,
+          cidade: newC.cidade,
+          estado: newC.estado,
+          sindico: newC.sindico,
+          unidades: newC.unidades,
+          moradores: newC.moradores,
+          proprietarios: newC.proprietarios,
+          receita: newC.receita,
+          despesa: newC.despesa,
+          inadimplencia_percent: newC.inadimplenciaPercent,
+          status: newC.status
+        });
+
+        if (error) {
+          console.error('Erro ao salvar condomínio no Supabase:', error.message);
+          onShowMessage("Erro no Banco", `Não foi possível persistir o condomínio na base do Supabase: ${error.message}. Por favor, certifique-se de que os privilégios RLS do seu login permitem escrita.`);
+          return;
+        }
+      } catch (err: any) {
+        console.error('Falha de rede ou conexão temporária:', err);
+        onShowMessage("Erro de Conexão", `Não foi possível contatar o Supabase: ${err.message || err}`);
+        return;
+      }
+    }
+
     setCondos(prev => {
       const list = [...prev, newC];
       if (!isSupabaseConfigured || !supabase) {
@@ -615,31 +647,11 @@ export default function AdminDashboardModal({
       }
       return list;
     });
+
     addAuditLog('CRIAR', 'condominios', `Criado novo condomínio: ${newCondoName} (Unidades: ${newCondoUnidades})`);
-
-    if (isSupabaseConfigured && supabase) {
-      supabase.from('condominios').insert({
-        id: newC.id,
-        nome: newC.nome,
-        cnpj: newC.cnpj,
-        endereco: newC.endereco,
-        bairro: newC.bairro,
-        cidade: newC.cidade,
-        estado: newC.estado,
-        sindico: newC.sindico,
-        unidades: newC.unidades,
-        moradores: newC.moradores,
-        proprietarios: newC.proprietarios,
-        receita: newC.receita,
-        despesa: newC.despesa,
-        inadimplencia_percent: newC.inadimplenciaPercent,
-        status: newC.status
-      }).then(({ error }) => {
-        if (error) console.error('Erro ao salvar condomínio no Supabase:', error.message);
-      });
-    }
-
-    onShowMessage("Sucesso", "Novo condomínio registrado com sucesso.");
+    onShowMessage("Sucesso", `Novo condomínio "${newC.nome}" registrado com sucesso.`);
+    
+    // Reset fields
     setNewCondoName('');
     setNewCondoCnpj('');
     setNewCondoSindico('');
@@ -1301,7 +1313,6 @@ export default function AdminDashboardModal({
         return [
           { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'condominios', label: 'Condomínios', icon: <Building2 className="w-4 h-4" /> },
-          { id: 'moradores', label: 'Moradores Base', icon: <Users className="w-4 h-4" /> },
           { id: 'perfis', label: 'Gestão de Perfis (Roles)', icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> },
           { id: 'financeiro', label: 'Financeiro Geral', icon: <Wallet className="w-4 h-4" /> },
           { id: 'portaria', label: 'Portaria Hub', icon: <Key className="w-4 h-4" /> },
@@ -1313,7 +1324,6 @@ export default function AdminDashboardModal({
         return [
           { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'condominios', label: 'Visualizar Condos', icon: <Building2 className="w-4 h-4" /> },
-          { id: 'moradores', label: 'Cadastrar Moradores', icon: <Users className="w-4 h-4" /> },
           { id: 'portaria', label: 'Monitorar Portaria', icon: <Key className="w-4 h-4" /> },
           { id: 'relatorios', label: 'Exportar Relatórios', icon: <FileText className="w-4 h-4" /> },
         ];
@@ -1322,14 +1332,12 @@ export default function AdminDashboardModal({
         return [
           { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'financeiro', label: 'Prestação de Contas', icon: <Wallet className="w-4 h-4" /> },
-          { id: 'moradores', label: 'Consultar Moradores', icon: <Users className="w-4 h-4" /> },
           { id: 'portaria', label: 'Controle Portaria', icon: <Key className="w-4 h-4" /> },
         ];
       case 'conselheiro':
         return [
           { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'financeiro', label: 'Balanço (Acesso Leitura)', icon: <Wallet className="w-4 h-4" /> },
-          { id: 'moradores', label: 'Lista Condôminos', icon: <Users className="w-4 h-4" /> },
           { id: 'portaria', label: 'Movimentação Visitantes', icon: <Key className="w-4 h-4" /> },
         ];
       case 'proprietario':
@@ -1343,7 +1351,6 @@ export default function AdminDashboardModal({
         return [
           { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'portaria', label: 'Ronda & Portaria', icon: <Key className="w-4 h-4" /> },
-          { id: 'moradores', label: 'Consulta Moradores', icon: <Users className="w-4 h-4" /> },
         ];
       default:
         return [];
@@ -1684,13 +1691,6 @@ export default function AdminDashboardModal({
                               {stats.moradores}
                             </h4>
                           </div>
-
-                          <button 
-                            onClick={() => setActiveSubPage('moradores')}
-                            className="text-xs font-bold text-[#0E7C66] hover:text-emerald-700 transition-colors mt-4 flex items-center gap-1 border-0 bg-transparent cursor-pointer pl-0"
-                          >
-                            Ver detalhes <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
                         </div>
 
                         {/* KPI 4: INADIMPLÊNCIA MÉDIA */}
@@ -2219,137 +2219,6 @@ export default function AdminDashboardModal({
                             </div>
                           );
                         })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. SUB-PAGE: MORADORES (CRUD) */}
-                {activeSubPage === 'moradores' && (
-                  <div className="space-y-6">
-                    {/* Add resident Form Toggle (Only if user has write permission) */}
-                    {verifyWritePermission(['admin', 'colaborador', 'sindico', 'subsindico'], 'Cadastrar Morador (Trigger check)') && (
-                      <div className="flex justify-between items-center bg-white p-4 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left">
-                        <span className="text-stone-500 text-xs font-sans">
-                          {showMoradorForm 
-                            ? 'Preencha o censo de habitante com nome, CPF e unidade.' 
-                            : 'Registre novos ocupantes, inquilinos ou proprietários no censo.'}
-                        </span>
-                        <button
-                          onClick={() => setShowMoradorForm(!showMoradorForm)}
-                          className="bg-primary hover:bg-[#af101a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
-                        >
-                          <Plus className={`w-4 h-4 transition-transform duration-200 ${showMoradorForm ? 'rotate-45' : ''}`} />
-                          {showMoradorForm ? 'Ocultar Formulário' : 'Registrar Morador'}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Add resident Form */}
-                    {verifyWritePermission(['admin', 'colaborador', 'sindico', 'subsindico'], 'Cadastrar Morador (Trigger check)') && showMoradorForm && (
-                      <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left space-y-4">
-                        <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1">
-                          <Plus className="w-4 h-4 text-emerald-500" /> Registrar Morador / Proprietário
-                        </h4>
-
-                        <form onSubmit={handleCreateMorador} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase">Nome Completo *</label>
-                            <input
-                              type="text"
-                              required
-                              value={newMoradorNome}
-                              onChange={(e) => setNewMoradorNome(e.target.value)}
-                              placeholder="Sérgio Mendes"
-                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase">CPF do Residente</label>
-                            <input
-                              type="text"
-                              value={newMoradorCpf}
-                              onChange={(e) => setNewMoradorCpf(e.target.value)}
-                              placeholder="000.000.000-00"
-                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-gray-400 uppercase">Bloco / Unidade *</label>
-                            <input
-                              type="text"
-                              required
-                              value={newMoradorUnidade}
-                              onChange={(e) => setNewMoradorUnidade(e.target.value)}
-                              placeholder="Apto 101"
-                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                            />
-                          </div>
-                          <div>
-                            <button
-                              type="submit"
-                              className="w-full bg-primary hover:bg-[#af101a] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer"
-                            >
-                              Confirmar Cadastro
-                            </button>
-                          </div>
-                        </form>
-                      </div>
-                    )}
-
-                    {/* Residents List */}
-                    <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left">
-                      <div className="flex justify-between items-center mb-4">
-                        <h4 className="text-xs font-extrabold text-secondary uppercase tracking-wider">Censo de Habitantes e Ocupantes</h4>
-                        <button
-                          onClick={() => handleExportCSV('moradores')}
-                          className="bg-gray-100 p-1.5 px-3 rounded text-[10px] font-bold hover:bg-gray-200 cursor-pointer"
-                        >
-                          Exportar Base XLSX
-                        </button>
-                      </div>
-
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-left">
-                          <thead>
-                            <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase text-[9px]">
-                              <th className="py-2">Nome Completo</th>
-                              <th className="py-2">CPF</th>
-                              <th className="py-2">Unidade</th>
-                              <th className="py-2">Relação Titularidade</th>
-                              <th className="py-2 text-right">Ação</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {visibleMoradores.map(item => (
-                              <tr key={item.id} className="border-b border-gray-100 hover:bg-slate-50">
-                                <td className="py-3 font-bold text-stone-850">{item.nome}</td>
-                                <td className="py-3 text-secondary font-mono">{item.cpf}</td>
-                                <td className="py-3 font-bold">{item.unidade}</td>
-                                <td className="py-3">
-                                  <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                    item.proprietario ? 'bg-indigo-50 text-indigo-600' : 'bg-amber-50 text-orange-600'
-                                  }`}>
-                                    {item.proprietario ? 'Proprietário' : 'Inquilino'}
-                                  </span>
-                                </td>
-                                <td className="py-3 text-right">
-                                  {activeProfile === 'admin' ? (
-                                    <button
-                                      onClick={() => handleDeleteMorador(item.id, item.nome)}
-                                      className="text-red-650 hover:text-red-800 p-1"
-                                      title="Deletar Registro"
-                                    >
-                                      Remover
-                                    </button>
-                                  ) : (
-                                    <span className="text-[9px] text-gray-400 italic">Restrito</span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
                       </div>
                     </div>
                   </div>

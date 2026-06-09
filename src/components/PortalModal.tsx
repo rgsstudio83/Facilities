@@ -743,13 +743,11 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
     if (prof.includes('porteiro')) {
       return [
         { id: 'admin_portaria', label: 'Ronda & Portaria', icon: <Key className="w-4 h-4" /> },
-        { id: 'admin_moradores', label: 'Consultar Moradores', icon: <Users className="w-4 h-4" /> },
       ];
     } else if (prof.includes('admin') || prof === 'administrador') {
       return [
         { id: 'admin_dashboard', label: 'Monitor Geral', icon: <Compass className="w-4 h-4" /> },
         { id: 'admin_condominios', label: 'Condomínios', icon: <Building2 className="w-4 h-4" /> },
-        { id: 'admin_moradores', label: 'Moradores Base', icon: <Users className="w-4 h-4" /> },
         { id: 'admin_financeiro', label: 'Financeiro Geral', icon: <Wallet className="w-4 h-4" /> },
         { id: 'admin_portaria', label: 'Portaria Hub', icon: <Key className="w-4 h-4" /> },
         { id: 'admin_relatorios', label: 'Relatórios Master', icon: <FileText className="w-4 h-4" /> },
@@ -760,7 +758,6 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
       return [
         { id: 'admin_dashboard', label: 'Painel Geral', icon: <Compass className="w-4 h-4" /> },
         { id: 'admin_condominios', label: 'Visualizar Condos', icon: <Building2 className="w-4 h-4" /> },
-        { id: 'admin_moradores', label: 'Cadastrar Moradores', icon: <Users className="w-4 h-4" /> },
         { id: 'admin_portaria', label: 'Ronda & Portaria', icon: <Key className="w-4 h-4" /> },
         { id: 'admin_relatorios', label: 'Exportar Relatórios', icon: <FileText className="w-4 h-4" /> },
       ];
@@ -768,7 +765,6 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
       return [
         { id: 'admin_dashboard', label: 'Faturamento & Visão', icon: <Compass className="w-4 h-4" /> },
         { id: 'admin_financeiro', label: 'Prestação de Contas', icon: <Wallet className="w-4 h-4" /> },
-        { id: 'admin_moradores', label: 'Consultar Moradores', icon: <Users className="w-4 h-4" /> },
         { id: 'admin_portaria', label: 'Controle Portaria', icon: <Key className="w-4 h-4" /> },
       ];
     } else if (prof.includes('conselheiro')) {
@@ -1995,170 +1991,6 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                         </div>
                       ))
                     )}
-                  </div>
-                </div>
-              )}
-
-              {/* ADMIN TAB: CADASTRO DE MORADORES */}
-              {activeTab === 'admin_moradores' && (
-                <div className="space-y-6">
-                  <div className="text-left">
-                    <h4 className="text-base font-bold text-[#101c29] font-display">Base Geral de Moradores e Perfis</h4>
-                    <p className="text-xs text-secondary mt-0.5">Controle integral de contas habilitadas e permissões. Adicione moradores que poderão acessar o app instantaneamente.</p>
-                  </div>
-
-                  {/* Inline resident creation form */}
-                  <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-sm space-y-4 text-left">
-                    <h5 className="text-xs font-bold text-[#101c29] uppercase tracking-wider flex items-center gap-2">
-                       Conceder Acesso a Novo Beneficiário / Perfil
-                    </h5>
-                    <form onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!newMoradorNome || !newMoradorCpf) return;
-                      
-                      const cleanCpf = newMoradorCpf.replace(/\D/g, '');
-                      const duplicate = usersDb.find(u => u.cpf.replace(/\D/g, '') === cleanCpf);
-                      if (duplicate) {
-                        alert('Este CPF já está cadastrado na base de dados.');
-                        return;
-                      }
-
-                      const newU = {
-                        name: newMoradorNome,
-                        cpf: cleanCpf,
-                        email: newMoradorEmail || `${cleanCpf}@facilitiescondominal.com`,
-                        pass: newMoradorSenha || '123',
-                        unit: newMoradorUnidade || 'Apto 101',
-                        profile: newMoradorRole
-                      };
-                      
-                      setUsersDb(prev => [...prev, newU]);
-                      addAuditLog('CRIAR', 'moradores', `Concedido acesso para ${newMoradorNome} como ${newMoradorRole}.`);
-                      onShowNotification('Conta Ativada!', `${newMoradorNome} foi adicionado à base de acesso.`);
-                      setNewMoradorNome('');
-                      setNewMoradorCpf('');
-                      setNewMoradorEmail('');
-                      setNewMoradorSenha('');
-                      setNewMoradorUnidade('');
-                    }} className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                      <input
-                        type="text"
-                        required
-                        placeholder="Nome Completo do Beneficiário"
-                        value={newMoradorNome}
-                        onChange={(e) => setNewMoradorNome(e.target.value)}
-                        className="bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                      />
-                      <input
-                        type="text"
-                        required
-                        placeholder="CPF (apenas números)"
-                        value={newMoradorCpf}
-                        onChange={(e) => setNewMoradorCpf(e.target.value)}
-                        className="bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Unidade / Bloco (Ex: Apto 24-B)"
-                        value={newMoradorUnidade}
-                        onChange={(e) => setNewMoradorUnidade(e.target.value)}
-                        className="bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                      />
-                      <input
-                        type="email"
-                        placeholder="E-mail (Opcional)"
-                        value={newMoradorEmail}
-                        onChange={(e) => setNewMoradorEmail(e.target.value)}
-                        className="bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                      />
-                      <input
-                        type="password"
-                        placeholder="Senha de Login (Padrão: 123)"
-                        value={newMoradorSenha}
-                        onChange={(e) => setNewMoradorSenha(e.target.value)}
-                        className="bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
-                      />
-                      <div className="flex gap-2">
-                        <select
-                          value={newMoradorRole}
-                          onChange={(e) => setNewMoradorRole(e.target.value)}
-                          className="bg-[#f8f9ff] border border-[#cfdbec] p-2 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] flex-1 font-semibold"
-                        >
-                          <option value="Morador">Morador</option>
-                          <option value="Síndico">Síndico</option>
-                          <option value="Colaborador">Colaborador</option>
-                          <option value="Administrador">Administrador</option>
-                          <option value="Conselheiro">Conselheiro</option>
-                          <option value="Porteiro">Porteiro</option>
-                        </select>
-                        <button
-                          type="submit"
-                          className="bg-[#af101a] hover:bg-[#900e15] text-white font-bold px-4 rounded-lg text-xs transition-colors cursor-pointer shrink-0 flex items-center justify-center gap-1"
-                        >
-                          Habilitar
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-
-                  {/* Registered Residents Table */}
-                  <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden text-left">
-                    <div className="p-4 bg-gray-50 border-b border-gray-200">
-                      <h5 className="text-xs font-bold text-[#101c29] uppercase tracking-wider">Contas Ativas no Supabase / Sandbox</h5>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-gray-100/60 text-secondary border-b border-gray-200">
-                            <th className="p-4 font-bold">Colaborador/Nome</th>
-                            <th className="p-4 font-bold">CPF Credencial</th>
-                            <th className="p-4 font-bold">Unidade Associada</th>
-                            <th className="p-4 font-bold">Nível / Perfil</th>
-                            <th className="p-4 font-bold">Ações</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {getFilteredUsersDb().map((item, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50">
-                              <td className="p-4 font-bold text-[#101c29]">{item.name}</td>
-                              <td className="p-4 font-mono text-secondary">{item.cpf}</td>
-                              <td className="p-4 font-semibold text-secondary">{item.unit}</td>
-                              <td className="p-4 font-bold">
-                                <span className={`px-2 py-0.5 rounded text-[10px] uppercase ${
-                                  (item.profile || 'Morador').toLowerCase().includes('admin')
-                                    ? 'bg-red-50 text-primary'
-                                    : (item.profile || 'Morador').toLowerCase().includes('colab')
-                                    ? 'bg-blue-50 text-blue-600'
-                                    : (item.profile || 'Morador').toLowerCase().includes('sindico') || (item.profile || 'Morador').toLowerCase().includes('síndico')
-                                    ? 'bg-amber-50 text-amber-600'
-                                    : 'bg-gray-100 text-gray-500'
-                                }`}>
-                                  {item.profile || 'Morador'}
-                                </span>
-                              </td>
-                              <td className="p-4">
-                                <button
-                                  onClick={() => {
-                                    if (item.cpf === '123' || item.cpf === '456') {
-                                      alert('Esta conta master protege o sistema e não pode ser deletada.');
-                                      return;
-                                    }
-                                    if (confirm(`Excluir conta de acesso para ${item.name}?`)) {
-                                      setUsersDb(prev => prev.filter((_, i) => i !== idx));
-                                      addAuditLog('EXCLUIR', 'moradores', `Excluído morador ${item.name}`);
-                                      onShowNotification('Sucesso', 'Morador excluído da base.');
-                                    }
-                                  }}
-                                  className="text-[#af101a] hover:underline font-bold cursor-pointer"
-                                >
-                                  Deletar Acesso
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
                   </div>
                 </div>
               )}
