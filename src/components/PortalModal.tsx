@@ -1861,6 +1861,29 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                         status: 'Normal'
                       };
                       setCondos(prev => [...prev, newObj]);
+                      
+                      if (isSupabaseConfigured && supabase) {
+                        supabase.from('condominios').insert({
+                          id: newObj.id,
+                          nome: newObj.nome,
+                          cnpj: newObj.cnpj,
+                          endereco: newObj.endereco,
+                          bairro: 'Centro',
+                          cidade: newObj.cidade,
+                          estado: newObj.estado,
+                          sindico: newObj.sindico,
+                          unidades: newObj.unidades,
+                          moradores: newObj.moradores,
+                          proprietarios: newObj.proprietarios,
+                          receita: newObj.receita,
+                          despesa: newObj.despesa,
+                          inadimplencia_percent: newObj.inadimplenciaPercent,
+                          status: newObj.status
+                        }).then(({ error }) => {
+                          if (error) console.error('Erro ao salvar condomínio no Supabase:', error.message);
+                        });
+                      }
+
                       addAuditLog('CRIAR', 'condominios', `Registrado condomínio ${newCondoName} com ${newCondoUnidades} unidades.`);
                       onShowNotification('Sucesso!', `Condomínio ${newCondoName} foi adicionado à base.`);
                       setNewCondoName('');
@@ -1953,6 +1976,13 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                               onClick={() => {
                                 if (confirm(`Tem certeza que deseja excluir o condomínio ${item.nome}?`)) {
                                   setCondos(prev => prev.filter(c => c.id !== item.id));
+                                  
+                                  if (isSupabaseConfigured && supabase) {
+                                    supabase.from('condominios').delete().eq('id', item.id).then(({ error }) => {
+                                      if (error) console.error('Erro ao excluir condomínio no Supabase:', error.message);
+                                    });
+                                  }
+
                                   addAuditLog('EXCLUIR', 'condominios', `Excluído condomínio ${item.nome}.`);
                                   onShowNotification('Excluído!', `Condomínio ${item.nome} removido da base.`);
                                 }

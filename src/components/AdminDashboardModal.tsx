@@ -186,6 +186,10 @@ export default function AdminDashboardModal({
   const [newCondoBairro, setNewCondoBairro] = useState('');
   const [newCondoCidade, setNewCondoCidade] = useState('');
   const [newCondoEstado, setNewCondoEstado] = useState('');
+  const [showCondoForm, setShowCondoForm] = useState(false);
+  const [showMoradorForm, setShowMoradorForm] = useState(false);
+  const [showProfileForm, setShowProfileForm] = useState(false);
+  const [showRoleTypeForm, setShowRoleTypeForm] = useState(false);
 
   const [newMoradorNome, setNewMoradorNome] = useState('');
   const [newMoradorCpf, setNewMoradorCpf] = useState('');
@@ -535,6 +539,7 @@ export default function AdminDashboardModal({
     setNewCondoBairro('');
     setNewCondoCidade('');
     setNewCondoEstado('');
+    setShowCondoForm(false);
   };
 
   const handleDeleteCondo = (id: string, name: string) => {
@@ -587,6 +592,7 @@ export default function AdminDashboardModal({
     setNewMoradorNome('');
     setNewMoradorCpf('');
     setNewMoradorUnidade('');
+    setShowMoradorForm(false);
   };
 
   const handleDeleteMorador = (id: string, name: string) => {
@@ -775,6 +781,7 @@ export default function AdminDashboardModal({
     setNewProfileUnidade('');
     setNewProfileTipo('morador');
     setSelectedProfileId(null);
+    setShowProfileForm(false);
   };
 
   const handleDeleteProfile = async (id: string, name: string) => {
@@ -857,6 +864,7 @@ export default function AdminDashboardModal({
     setNewRoleTypeId('');
     setNewRoleTypeNome('');
     setNewRoleTypeDescricao('');
+    setShowRoleTypeForm(false);
   };
 
   const handleDeleteRoleType = (id: string, nome: string) => {
@@ -1387,25 +1395,7 @@ export default function AdminDashboardModal({
                   {activeSubPage === 'dashboard' && (
                     <div className="space-y-6">
                       
-                      {/* Top Header Selector & Welcome Banner */}
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 text-left select-none">
-                        <div>
-                          <h1 className="text-2xl md:text-3xl font-extrabold text-[#0F172A] tracking-tight font-display flex items-center gap-2">
-                            Olá, {getActiveUserDetails().nome.split(' ')[0]}! <span className="animate-bounce inline-block">👋</span>
-                          </h1>
-                          <p className="text-xs text-[#64748B] mt-1">Aqui está o resumo operacional das suas diretrizes de RLS hoje.</p>
-                        </div>
 
-                        {/* Calendar Period Selector Box */}
-                        <div className="bg-white px-4 py-2.5 rounded-xl border border-[#E2E8F0] shadow-xs flex items-center gap-3 select-none hover:bg-slate-50 transition-colors cursor-pointer">
-                          <Calendar className="w-4.5 h-4.5 text-[#64748B]" />
-                          <div className="text-left leading-none font-sans">
-                            <span className="text-[9px] text-[#64748B] block font-bold uppercase tracking-wider">Faturamento Período</span>
-                            <span className="text-xs text-[#0F172A] font-extrabold">Julho 2026</span>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-[#64748B] rotate-90 ml-1 shrink-0" />
-                        </div>
-                      </div>
 
                       {/* RLS Warning / Danger insight banner at the top */}
                       {!isRlsAlertDismissed && (
@@ -1796,119 +1786,139 @@ export default function AdminDashboardModal({
                 {/* 3. SUB-PAGE: CONDOMINIOS CRUD */}
                 {activeSubPage === 'condominios' && (
                   <div className="space-y-6">
+                    {/* Add condo form toggle button - available for admin */}
+                    {activeProfile === 'admin' && (
+                      <div className="flex justify-between items-center bg-white p-4 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)]">
+                        <span className="text-stone-500 text-xs font-sans">
+                          {showCondoForm 
+                            ? 'Preencha o formulário para adicionar um novo condomínio.' 
+                            : 'Gerencie ou cadastre novos condomínios na base central.'}
+                        </span>
+                        <button
+                          onClick={() => setShowCondoForm(!showCondoForm)}
+                          className="bg-primary hover:bg-[#af101a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <Plus className={`w-4 h-4 transition-transform duration-200 ${showCondoForm ? 'rotate-45' : ''}`} />
+                          {showCondoForm ? 'Ocultar Formulário' : 'Cadastrar Condomínio'}
+                        </button>
+                      </div>
+                    )}
+
                     {/* Add condo form - available for admin */}
                     {activeProfile === 'admin' ? (
-                      <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left space-y-4">
-                        <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1">
-                          <Plus className="w-4 h-4 text-emerald-500" /> Cadastrar Novo Condomínio Administrado
-                        </h4>
-                        
-                        <form onSubmit={handleCreateCondo} className="space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-400 uppercase">Nome Fantasia *</label>
-                              <input
-                                type="text"
-                                required
-                                value={newCondoName}
-                                onChange={(e) => setNewCondoName(e.target.value)}
-                                placeholder="Residencial Miramar"
-                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                              />
+                      showCondoForm && (
+                        <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left space-y-4">
+                          <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1">
+                            <Plus className="w-4 h-4 text-emerald-500" /> Cadastrar Novo Condomínio Administrado
+                          </h4>
+                          
+                          <form onSubmit={handleCreateCondo} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Nome Fantasia *</label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={newCondoName}
+                                  onChange={(e) => setNewCondoName(e.target.value)}
+                                  placeholder="Residencial Miramar"
+                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ Comercial</label>
+                                <input
+                                  type="text"
+                                  value={newCondoCnpj}
+                                  onChange={(e) => setNewCondoCnpj(e.target.value)}
+                                  placeholder="00.000.000/0001-00"
+                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Designado</label>
+                                <input
+                                  type="text"
+                                  value={newCondoSindico}
+                                  onChange={(e) => setNewCondoSindico(e.target.value)}
+                                  placeholder="Nome do Síndico"
+                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades Autônomas *</label>
+                                <input
+                                  type="number"
+                                  required
+                                  min="1"
+                                  value={newCondoUnidades}
+                                  onChange={(e) => setNewCondoUnidades(Number(e.target.value || 0))}
+                                  placeholder="60"
+                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                />
+                              </div>
                             </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ Comercial</label>
-                              <input
-                                type="text"
-                                value={newCondoCnpj}
-                                onChange={(e) => setNewCondoCnpj(e.target.value)}
-                                placeholder="00.000.000/0001-00"
-                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Designado</label>
-                              <input
-                                type="text"
-                                value={newCondoSindico}
-                                onChange={(e) => setNewCondoSindico(e.target.value)}
-                                placeholder="Nome do Síndico"
-                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-400 uppercase">Unidades Autônomas *</label>
-                              <input
-                                type="number"
-                                required
-                                min="1"
-                                value={newCondoUnidades}
-                                onChange={(e) => setNewCondoUnidades(Number(e.target.value || 0))}
-                                placeholder="60"
-                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                              />
-                            </div>
-                          </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="space-y-1 md:col-span-2">
-                              <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço *</label>
-                              <input
-                                type="text"
-                                required
-                                value={newCondoEndereco}
-                                onChange={(e) => setNewCondoEndereco(e.target.value)}
-                                placeholder="Ex: Av. Bartolomeu de Gusmão, 142"
-                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                              />
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                              <div className="space-y-1 md:col-span-2">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço *</label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={newCondoEndereco}
+                                  onChange={(e) => setNewCondoEndereco(e.target.value)}
+                                  placeholder="Ex: Av. Bartolomeu de Gusmão, 142"
+                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro *</label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={newCondoBairro}
+                                  onChange={(e) => setNewCondoBairro(e.target.value)}
+                                  placeholder="Ex: Aparecida"
+                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade *</label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={newCondoCidade}
+                                  onChange={(e) => setNewCondoCidade(e.target.value)}
+                                  placeholder="Ex: Santos"
+                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                />
+                              </div>
                             </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro *</label>
-                              <input
-                                type="text"
-                                required
-                                value={newCondoBairro}
-                                onChange={(e) => setNewCondoBairro(e.target.value)}
-                                placeholder="Ex: Aparecida"
-                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade *</label>
-                              <input
-                                type="text"
-                                required
-                                value={newCondoCidade}
-                                onChange={(e) => setNewCondoCidade(e.target.value)}
-                                placeholder="Ex: Santos"
-                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                              />
-                            </div>
-                          </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                            <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-gray-400 uppercase">Estado *</label>
-                              <input
-                                type="text"
-                                required
-                                value={newCondoEstado}
-                                onChange={(e) => setNewCondoEstado(e.target.value)}
-                                placeholder="Ex: SP"
-                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
-                              />
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase">Estado *</label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={newCondoEstado}
+                                  onChange={(e) => setNewCondoEstado(e.target.value)}
+                                  placeholder="Ex: SP"
+                                  className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none"
+                                />
+                              </div>
+                              <div className="md:col-span-3 text-right">
+                                <button
+                                  type="submit"
+                                  className="w-full md:w-auto px-8 bg-primary hover:bg-[#af101a] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer inline-block"
+                                >
+                                  Cadastrar Condomínio
+                                </button>
+                              </div>
                             </div>
-                            <div className="md:col-span-3 text-right">
-                              <button
-                                type="submit"
-                                className="w-full md:w-auto px-8 bg-primary hover:bg-[#af101a] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer inline-block"
-                              >
-                                Cadastrar Condomínio
-                              </button>
-                            </div>
-                          </div>
-                        </form>
-                      </div>
+                          </form>
+                        </div>
+                      )
                     ) : (
                       <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl text-left text-xs">
                         🛡️ <strong>Acesso Limitado:</strong> Somente o cargo de <strong>Administrador Principal</strong> da Facilities possui permissão RLS para registrar novos condomínios na base central Postgresql.
@@ -1916,7 +1926,7 @@ export default function AdminDashboardModal({
                     )}
 
                     {/* Listings */}
-                    <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left">
+                    <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left">
                       <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider mb-4">Base Operativa de Condomínios</h4>
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
@@ -1980,9 +1990,27 @@ export default function AdminDashboardModal({
                 {/* 4. SUB-PAGE: MORADORES (CRUD) */}
                 {activeSubPage === 'moradores' && (
                   <div className="space-y-6">
-                    {/* Add resident Form */}
+                    {/* Add resident Form Toggle (Only if user has write permission) */}
                     {verifyWritePermission(['admin', 'colaborador', 'sindico', 'subsindico'], 'Cadastrar Morador (Trigger check)') && (
-                      <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left space-y-4">
+                      <div className="flex justify-between items-center bg-white p-4 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left">
+                        <span className="text-stone-500 text-xs font-sans">
+                          {showMoradorForm 
+                            ? 'Preencha o censo de habitante com nome, CPF e unidade.' 
+                            : 'Registre novos ocupantes, inquilinos ou proprietários no censo.'}
+                        </span>
+                        <button
+                          onClick={() => setShowMoradorForm(!showMoradorForm)}
+                          className="bg-primary hover:bg-[#af101a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
+                        >
+                          <Plus className={`w-4 h-4 transition-transform duration-200 ${showMoradorForm ? 'rotate-45' : ''}`} />
+                          {showMoradorForm ? 'Ocultar Formulário' : 'Registrar Morador'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Add resident Form */}
+                    {verifyWritePermission(['admin', 'colaborador', 'sindico', 'subsindico'], 'Cadastrar Morador (Trigger check)') && showMoradorForm && (
+                      <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left space-y-4">
                         <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1">
                           <Plus className="w-4 h-4 text-emerald-500" /> Registrar Morador / Proprietário
                         </h4>
@@ -2033,7 +2061,7 @@ export default function AdminDashboardModal({
                     )}
 
                     {/* Residents List */}
-                    <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left">
+                    <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left">
                       <div className="flex justify-between items-center mb-4">
                         <h4 className="text-xs font-extrabold text-secondary uppercase tracking-wider">Censo de Habitantes e Ocupantes</h4>
                         <button
@@ -2305,9 +2333,40 @@ export default function AdminDashboardModal({
                       </div>
                     )}
 
-                    {/* Se for administrador, exibe formulário de adição / edição de perfil */}
+                    {/* Add profile/user form toggle button - available for admin */}
                     {activeProfile === 'admin' && (
-                      <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm space-y-4">
+                      <div className="flex justify-between items-center bg-white p-4 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left">
+                        <span className="text-stone-500 text-xs font-sans">
+                          {selectedProfileId 
+                            ? `Editando o perfil de "${newProfileNome}".` 
+                            : showProfileForm 
+                              ? 'Preencha os dados e atribua uma role de acesso ao novo usuário.' 
+                              : 'Registre um novo usuário na base e defina sua role de acesso.'}
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (showProfileForm && selectedProfileId) {
+                              // Reset edit state when manually collapsing
+                              setSelectedProfileId(null);
+                              setNewProfileNome('');
+                              setNewProfileEmail('');
+                              setNewProfileCpf('');
+                              setNewProfileUnidade('');
+                              setNewProfileTipo('morador');
+                            }
+                            setShowProfileForm(!showProfileForm);
+                          }}
+                          className="bg-primary hover:bg-[#af101a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
+                        >
+                          <Plus className={`w-4 h-4 transition-transform duration-200 ${(showProfileForm || selectedProfileId) ? 'rotate-45' : ''}`} />
+                          {(showProfileForm || selectedProfileId) ? 'Ocultar Formulário' : 'Novo Usuário'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Se for administrador, exibe formulário de adição / edição de perfil */}
+                    {activeProfile === 'admin' && (showProfileForm || selectedProfileId) && (
+                      <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] space-y-4">
                         <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 border-b border-gray-100 pb-2">
                           <Plus className="w-4 h-4 text-emerald-500" /> {selectedProfileId ? 'Editar Perfil / Role' : 'Registrar Novo Usuário com Role de Acesso'}
                         </h4>
@@ -2400,6 +2459,7 @@ export default function AdminDashboardModal({
                                   setNewProfileCpf('');
                                   setNewProfileUnidade('');
                                   setNewProfileTipo('morador');
+                                  setShowProfileForm(false);
                                 }}
                                 className="bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold px-3 py-2.5 text-xs rounded-lg transition-transform active:scale-95 cursor-pointer text-center"
                               >
@@ -2412,7 +2472,7 @@ export default function AdminDashboardModal({
                     )}
 
                     {/* Tabela de listagem dos Perfis de Roles existentes */}
-                    <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left space-y-4">
+                    <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left space-y-4">
                       <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                         <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider">
                           Perfis Registrados e Autenticações do Sistema
@@ -2471,6 +2531,7 @@ export default function AdminDashboardModal({
                                             setNewProfileCpf(item.cpf || '');
                                             setNewProfileUnidade(item.unidade || '');
                                             setNewProfileTipo(item.tipo);
+                                            setShowProfileForm(true);
                                           }}
                                           className="text-amber-650 hover:text-amber-800 font-bold hover:underline bg-transparent border-none cursor-pointer"
                                         >
@@ -2496,11 +2557,39 @@ export default function AdminDashboardModal({
                     </div>
 
                     {/* SEÇÃO: GERENCIAMENTO DE TIPOS DE ROLE / PAPÉIS DE ACESSO */}
+                    {/* Role types toggle button - available for admin */}
+                    {activeProfile === 'admin' && (
+                      <div className="flex justify-between items-center bg-white p-4 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left">
+                        <span className="text-stone-500 text-xs font-sans">
+                          {selectedRoleTypeId 
+                            ? `Editando as diretrizes do papel "${newRoleTypeNome}".` 
+                            : showRoleTypeForm 
+                              ? 'Preencha os dados no formulário para estruturar a nova role de acesso.' 
+                              : 'Crie e configure novos níveis hierárquicos e papéis corporativos personalizados.'}
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (showRoleTypeForm && selectedRoleTypeId) {
+                              setSelectedRoleTypeId(null);
+                              setNewRoleTypeId('');
+                              setNewRoleTypeNome('');
+                              setNewRoleTypeDescricao('');
+                            }
+                            setShowRoleTypeForm(!showRoleTypeForm);
+                          }}
+                          className="bg-[#101c29] hover:bg-black text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
+                        >
+                          <Plus className={`w-4 h-4 transition-transform duration-200 ${(showRoleTypeForm || selectedRoleTypeId) ? 'rotate-45' : ''}`} />
+                          {(showRoleTypeForm || selectedRoleTypeId) ? 'Ocultar Form Papel' : 'Novo Papel de Acesso'}
+                        </button>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       
                       {/* Formulário de Tipos de Role (Apenas se for Admin) */}
-                      {activeProfile === 'admin' && (
-                        <div className="md:col-span-1 bg-white p-6 rounded-2xl border border-gray-150 shadow-sm space-y-4 h-fit text-left">
+                      {activeProfile === 'admin' && (showRoleTypeForm || selectedRoleTypeId) && (
+                        <div className="md:col-span-1 bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] space-y-4 h-fit text-left">
                           <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 border-b border-gray-100 pb-2">
                             <Plus className="w-4 h-4 text-emerald-500" /> {selectedRoleTypeId ? 'Editar Tipo de Role' : 'Criar Tipo de Role'}
                           </h4>
@@ -2566,6 +2655,7 @@ export default function AdminDashboardModal({
                                       setNewRoleTypeId('');
                                       setNewRoleTypeNome('');
                                       setNewRoleTypeDescricao('');
+                                      setShowRoleTypeForm(false);
                                     }}
                                     className="bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold px-3 py-2.5 text-xs rounded-lg transition-transform active:scale-95 cursor-pointer text-center"
                                   >
@@ -2579,7 +2669,7 @@ export default function AdminDashboardModal({
                       )}
 
                       {/* Lista e ações para Tipos de Role */}
-                      <div className={activeProfile === 'admin' ? "md:col-span-2 bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left space-y-4" : "col-span-3 bg-white p-6 rounded-2xl border border-gray-150 shadow-sm text-left space-y-4"}>
+                      <div className={(activeProfile === 'admin' && (showRoleTypeForm || selectedRoleTypeId)) ? "md:col-span-2 bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left space-y-4" : "col-span-3 bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left space-y-4"}>
                         <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                           <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 font-display">
                             <Key className="w-4 h-4 text-indigo-500" /> Tipos de Roles e Escopos Disponíveis
@@ -2616,6 +2706,7 @@ export default function AdminDashboardModal({
                                             setNewRoleTypeId(rt.id);
                                             setNewRoleTypeNome(rt.nome);
                                             setNewRoleTypeDescricao(rt.descricao || '');
+                                            setShowRoleTypeForm(true);
                                           }}
                                           className="text-amber-650 hover:text-amber-800 font-bold hover:underline bg-transparent border-none cursor-pointer"
                                         >
@@ -2649,7 +2740,7 @@ export default function AdminDashboardModal({
                 {/* 6. SUB-PAGE: AUDITORIA LOGS (CRUD AUDITED ACTION TIMELINE) */}
                 {activeSubPage === 'auditoria' && (
                   <div className="space-y-6 text-left">
-                    <div className="bg-white p-5 rounded-3xl border border-gray-150 shadow-sm text-left space-y-4">
+                    <div className="bg-white p-5 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left space-y-4">
                       <div className="flex justify-between items-center border-b border-gray-150 pb-3 flex-wrap gap-2">
                         <div>
                           <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 font-sans">
@@ -2785,7 +2876,7 @@ export default function AdminDashboardModal({
                 {/* 8. SUB-PAGE: CONFIG RELATÓRIOS/ FINANCEIRO GERAL */}
                 {activeSubPage === 'financeiro' && (
                   <div className="space-y-6 text-left">
-                    <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-sm space-y-4">
+                    <div className="bg-white p-5 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] space-y-4">
                       <div className="flex justify-between items-center flex-wrap gap-2">
                         <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider">Lançamentos de Contabilidade e Conciliação Geral</h4>
                         <span className="text-[10px] text-gray-400">Status financeiro consolidado {stats.totalCondos > 1 ? "Multicondominial" : "Unicondominial"}</span>
