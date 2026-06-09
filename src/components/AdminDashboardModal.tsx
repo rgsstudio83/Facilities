@@ -1161,22 +1161,7 @@ export default function AdminDashboardModal({
               {activeProfile === 'conselheiro' && "Modo Read-Only Ativo: Conselheiros visualizam financeiro e inadimplência mas não podem gravar ou deletar dados."}
             </p>
           </div>
-        ) : (
-          <div className="bg-[#0b1d2e] border-b border-[#2eaf58]/40 p-4 select-none shrink-0 text-left flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
-              <div>
-                <span className="text-[10px] text-emerald-400 uppercase font-mono tracking-widest font-black block">Painel Autenticado Via Supabase / Portal</span>
-                <span className="text-white font-sans text-xs font-semibold">
-                  Sessão ativa de <strong className="text-emerald-400 font-bold">{currentUser.name}</strong> • Função: <strong className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] uppercase font-mono px-2 py-0.5 rounded font-black">{currentUser.profile}</strong> {currentUser.unit ? `• Unidade: ${currentUser.unit}` : ''}
-                </span>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Acesso Seguro</span>
-            </div>
-          </div>
-        )}
+        ) : null}
 
         {/* MAIN BODY CORE */}
         <div id="admin-main-body" className="overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] h-full w-full">
@@ -1283,31 +1268,16 @@ export default function AdminDashboardModal({
             {/* White Premium Sticky Header (80px height: h-20) */}
             <header className="h-20 bg-white border-b border-[#E2E8F0] px-6 md:px-8 flex items-center justify-between shrink-0 select-none select-none z-10 shadow-xs">
               
-              {/* Left Column: Latency / Connection Pulse */}
+              {/* Left Column: Active Page Title */}
               <div className="flex items-center gap-3">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22C55E] opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#22C55E]"></span>
-                </span>
-                <span className="text-xs text-[#64748B] font-medium hidden sm:inline-block">
-                  Sessão ativa sob ambiente monitorado de RLS do PostgreSQL
-                </span>
+                <h1 className="text-lg md:text-xl font-bold font-sans text-[#101c29]">
+                  {getMenuItems().find(item => item.id === activeSubPage)?.label || 'Painel de Controle'}
+                </h1>
               </div>
 
               {/* Right Column: Database Connection badge, Alarm bell, avatar */}
               <div className="flex items-center gap-4">
                 
-                {/* Connection Status badge */}
-                <div className="bg-white border border-[#E2E8F0] px-3.5 py-1.5 rounded-full flex items-center gap-2 shadow-xs shrink-0 select-none">
-                  <div className="h-5 w-5 rounded-full bg-emerald-50 border border-emerald-500/10 flex items-center justify-center text-emerald-500">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="text-left leading-none font-sans">
-                    <p className="text-[#10B981] font-black text-[9px] uppercase tracking-wider">Connected Supabase</p>
-                    <p className="text-[#64748B] font-mono text-[8.5px] mt-0.5 leading-none font-bold">Latency: 12ms</p>
-                  </div>
-                </div>
-
                 {/* Alarm Bell Button */}
                 <button className="relative p-2 rounded-xl text-[#64748B] hover:text-[#0F172A] hover:bg-slate-100 transition-colors shrink-0 cursor-pointer">
                   <Bell className="w-5 h-5" />
