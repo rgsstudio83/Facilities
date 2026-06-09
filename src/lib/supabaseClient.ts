@@ -40,8 +40,8 @@ const rawKey = getStorageVal('VITE_SUPABASE_ANON_KEY') ||
                 import.meta.env.VITE_SUPABASE_ANON_KEY || 
                 (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_ANON_KEY : '') || '';
 
-const supabaseUrl = cleanEnvVar(rawUrl).replace(/\/$/, ''); // Remove trailing slashes
-const supabaseAnonKey = cleanEnvVar(rawKey);
+export const supabaseUrl = cleanEnvVar(rawUrl).replace(/\/$/, ''); // Remove trailing slashes
+export const supabaseAnonKey = cleanEnvVar(rawKey);
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 

@@ -37,7 +37,8 @@ import {
   Check,
   Bell
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { supabase, isSupabaseConfigured, supabaseUrl, supabaseAnonKey } from '../lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 
 interface AdminDashboardModalProps {
   isOpen: boolean;
@@ -191,6 +192,7 @@ export default function AdminDashboardModal({
   const [newProfileCpf, setNewProfileCpf] = useState('');
   const [newProfileUnidade, setNewProfileUnidade] = useState('');
   const [newProfileTipo, setNewProfileTipo] = useState('morador');
+  const [newProfilePassword, setNewProfilePassword] = useState('');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
 
   // Role Types Dynamic States & Forms definition
@@ -597,7 +599,7 @@ export default function AdminDashboardModal({
     }
 
     const isEdit = !!selectedProfileId;
-    const targetId = selectedProfileId || `p-${Date.now()}`;
+    let targetId = selectedProfileId || `p-${Date.now()}`;
 
     // Determina o perfil legível correspondente ao tipo de role
     let resolvedPerfil = 'Morador';
@@ -619,6 +621,77 @@ export default function AdminDashboardModal({
     const formattedCpf = cleanCpf.length === 11 
       ? cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
       : newProfileCpf;
+
+    // Se for um cadastro real do Supabase (e não edição), tentar criar conta auth
+    // usando um cliente alternativo/temporário para não deslogar o admin logado
+    if (isSupabaseConfigured && !isEdit) {
+      if (!newProfilePassword.trim()) {
+        onShowMessage("Erro de Validação", "Por favor, informe a Senha de Acesso para o novo usuário.");
+        return;
+      }
+      try {
+        const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false
+          }
+        });
+
+        const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
+          email: newProfileEmail.trim(),
+          password: newProfilePassword,
+          options: {
+            data: {
+              full_name: newProfileNome.trim(),
+              unit: newProfileUnidade || 'Apto Geral',
+              profile: resolvedPerfil,
+              cpf: formattedCpf
+            }
+          }
+        });
+
+        if (signUpError) {
+          throw signUpError;
+        }
+
+        if (signUpData?.user) {
+          targetId = signUpData.user.id;
+        }
+      } catch (authErr: any) {
+        console.error('Erro de Autenticação no Supabase Auth:', authErr);
+        onShowMessage("Erro ao Criar Login", `Não foi possível criar as credenciais de autenticação no Supabase Auth: ${authErr.message}`);
+        return;
+      }
+    }
+
+    // Salva no repositório de simulação offline de usuários (facilities_portal_users) para login local fallback
+    if (!isEdit) {
+      try {
+        const savedUsers = localStorage.getItem('facilities_portal_users');
+        let users = [];
+        if (savedUsers) {
+          try { users = JSON.parse(savedUsers); } catch { users = []; }
+        }
+        const newUserSim = {
+          cpf: formattedCpf,
+          email: newProfileEmail.trim(),
+          pass: newProfilePassword || '123456',
+          name: newProfileNome.trim(),
+          unit: newProfileUnidade || 'Apto Geral',
+          profile: resolvedPerfil
+        };
+        const uIdx = users.findIndex((u: any) => u.email.toLowerCase() === newProfileEmail.trim().toLowerCase());
+        if (uIdx !== -1) {
+          users[uIdx] = newUserSim;
+        } else {
+          users.push(newUserSim);
+        }
+        localStorage.setItem('facilities_portal_users', JSON.stringify(users));
+      } catch (err) {
+        console.warn('Erro ao atualizar base de credenciais local:', err);
+      }
+    }
 
     const profileData: UserProfile = {
       id: targetId,
@@ -681,6 +754,7 @@ export default function AdminDashboardModal({
     // Limpa formulário
     setNewProfileNome('');
     setNewProfileEmail('');
+    setNewProfilePassword('');
     setNewProfileCpf('');
     setNewProfileUnidade('');
     setNewProfileTipo('morador');
@@ -2204,6 +2278,19 @@ export default function AdminDashboardModal({
                               ))}
                             </select>
                           </div>
+                          {!selectedProfileId && (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-400 uppercase block">Senha de Acesso *</label>
+                              <input
+                                type="password"
+                                required
+                                value={newProfilePassword}
+                                onChange={(e) => setNewProfilePassword(e.target.value)}
+                                placeholder="Defina a senha (mín. 6 chars)"
+                                className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                              />
+                            </div>
+                          )}
                           <div className="flex gap-2">
                             <button
                               type="submit"
