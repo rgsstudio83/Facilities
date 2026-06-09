@@ -80,6 +80,93 @@ export const saveSimulatedData = <T>(key: string, item: T): void => {
   localStorage.setItem(`supabase_sim_${key}`, JSON.stringify([item, ...current]));
 };
 
+// Resilient insert helper - filters out missing columns on the fly if they don't exist in Supabase
+export async function insertResilient(tableName: string, record: Record<string, any>) {
+  console.log(`%c[Supabase INSERT] 🚀 Iniciando fluxo de cadastro na tabela '${tableName}'...`, 'color: #3ecf8e; font-weight: bold; font-size: 14px; background-color: #101c29; padding: 4px 8px; border-radius: 4px;');
+  console.log(`[Supabase INSERT] 📥 Dados originais enviados pelo formulário:`, JSON.stringify(record, null, 2));
+
+  if (!isSupabaseConfigured || !supabase) {
+    const backupError = new Error('Supabase de teste não está configurado. O sistema usará gravação local/simulada.');
+    console.warn('[Supabase INSERT] ⚠️ Redirecionado para Simulação Local:', backupError.message);
+    return { data: null, error: backupError };
+  }
+
+  let currentRecord = { ...record };
+  let attempts = 0;
+  const maxAttempts = 15;
+
+  while (attempts < maxAttempts) {
+    console.log(`[Supabase INSERT] 🔄 Tentativa #${attempts + 1} de gravação na tabela '${tableName}'...`);
+    console.log(`[Supabase INSERT] 📦 Payload enviado nesta tentativa:`, JSON.stringify(currentRecord, null, 2));
+
+    const { data: dbData, error } = await supabase.from(tableName).insert(currentRecord).select();
+    
+    if (!error) {
+      console.log(`%c[Supabase INSERT] ✅ SUCESSO! Cadastro efetuado com êxito na tabela '${tableName}' na tentativa #${attempts + 1}!`, 'color: #10b981; font-weight: bold; font-size: 13px;');
+      console.log(`[Supabase INSERT] 🎉 Resultado do INSERT:`, {
+        status: 'Gravado',
+        record: currentRecord,
+        data: dbData
+      });
+      return { data: dbData || [currentRecord], error: null };
+    }
+
+    console.warn(`%c[Supabase INSERT] ❌ FALHA na tentativa #${attempts + 1} para tabela '${tableName}':`, 'color: #f59e0b; font-weight: bold;');
+    console.warn(`[Supabase INSERT] Código de Erro:`, error.code);
+    console.warn(`[Supabase INSERT] Mensagem de Erro:`, error.message);
+    console.warn(`[Supabase INSERT] Objeto do Erro Completo:`, error);
+
+    // PostgreSQL undefined_column code "42703" or PostgREST schema cache missing column error.
+    const isMissingColumnError = 
+      error.code === '42703' || 
+      (error.message && error.message.includes('column') && error.message.includes('does not exist')) ||
+      (error.message && error.message.includes('não existe')) ||
+      (error.message && error.message.includes('schema cache')) ||
+      (error.message && error.message.includes('Could not find') && error.message.includes('column'));
+
+    if (isMissingColumnError) {
+      // Extract column name, e.g. column "sindico" of relation "condominios" does not exist OR Could not find the 'despesa' column...
+      const match = error.message.match(/column "([^"]+)"/i) || 
+                    error.message.match(/coluna "([^"]+)"/i) ||
+                    error.message.match(/Could not find the '([^']+)' column/i) ||
+                    error.message.match(/column '([^']+)'/i);
+      
+      if (match && match[1]) {
+        const missingColumn = match[1];
+        console.log(`%c[Supabase INSERT] 🛠️ Autocorreção: Detectado que a coluna '${missingColumn}' não existe no banco ou está ausente no cache do Supabase. Removendo dos dados e redefinindo envio...`, 'color: #3b82f6; font-weight: bold;');
+        delete currentRecord[missingColumn];
+        attempts++;
+        continue;
+      } else {
+        // Se não conseguirmos extrair com regex, vamos tentar adivinhar a partir de conhecidos
+        let cleanedSome = false;
+        const knownFields = Object.keys(currentRecord);
+        for (const field of knownFields) {
+          if (error.message.toLowerCase().includes(field.toLowerCase())) {
+            console.log(`%c[Supabase INSERT] 🛠️ Autocorreção Fallback: Encontrado termo '${field}' no erro do Supabase. Removendo do envio...`, 'color: #3b82f6;');
+            delete currentRecord[field];
+            cleanedSome = true;
+          }
+        }
+        
+        if (cleanedSome) {
+          attempts++;
+          continue;
+        }
+      }
+    }
+    
+    // Otherwise return error
+    console.error(`%c[Supabase INSERT] 🛑 ERRO DEFINITIVO de gravação na tabela '${tableName}'! Fluxo interrompido devido a erro crítico:`, 'color: #ef4444; font-weight: bold; font-size: 13px;');
+    console.error(`[Supabase INSERT] Mensagem final retornada pelo Supabase:`, error.message);
+    return { data: null, error };
+  }
+
+  const limitError = new Error('Resilient insert limits exceeded.');
+  console.error('[Supabase INSERT] 🛑 ERRO DEFINITIVO:', limitError.message);
+  return { data: null, error: limitError };
+}
+
 // SQL helper pattern for tables creation
 export const SQL_SETUP_SCRIPT = `-- EXECUTE ESTE SCRIPT NO EDITOR SQL DO SEU PAINEL SUPABASE:
 

@@ -38,7 +38,7 @@ import {
   Check,
   Bell
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured, supabaseUrl, supabaseAnonKey } from '../lib/supabaseClient';
+import { supabase, isSupabaseConfigured, supabaseUrl, supabaseAnonKey, insertResilient } from '../lib/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
 
 const generateUUID = (): string => {
@@ -706,7 +706,7 @@ export default function AdminDashboardModal({
 
     if (isSupabaseConfigured && supabase) {
       try {
-        const { error } = await supabase.from('condominios').insert({
+        const { error } = await insertResilient('condominios', {
           id: newC.id,
           nome: newC.nome,
           cnpj: newC.cnpj,

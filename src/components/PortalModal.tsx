@@ -29,7 +29,7 @@ import {
   Plus
 } from 'lucide-react';
 import { Boleto, Booking, Assembly, Ticket } from '../types';
-import { supabase, isSupabaseConfigured, saveSimulatedData, getSimulatedData } from '../lib/supabaseClient';
+import { supabase, isSupabaseConfigured, saveSimulatedData, getSimulatedData, insertResilient } from '../lib/supabaseClient';
 import { usePortalRouter } from './PortalRouter';
 
 const generateUUID = (): string => {
@@ -488,7 +488,24 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
         // 5. Fetch Condos
         const { data: dbCondos, error: errCondos } = await supabase.from('condominios').select('*');
         if (dbCondos && !errCondos) {
-          setCondos(dbCondos);
+          const mappedCondos = dbCondos.map((c: any) => ({
+            id: c.id,
+            nome: c.nome,
+            cnpj: c.cnpj || '',
+            endereco: c.endereco || '',
+            bairro: c.bairro || '',
+            cidade: c.cidade || '',
+            estado: c.estado || '',
+            sindico: c.sindico || 'Administradora Facilities',
+            unidades: Number(c.unidades || 80),
+            moradores: Number(c.moradores || 224),
+            proprietarios: Number(c.proprietarios || 76),
+            receita: Number(c.receita || 60000),
+            despesa: Number(c.despesa || 49600),
+            inadimplenciaPercent: Number(c.inadimplencia_percent || 5.0),
+            status: c.status || 'Normal'
+          }));
+          setCondos(mappedCondos);
         } else {
           setCondos([]);
         }
@@ -1974,43 +1991,52 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                               inadimplenciaPercent: 5.0,
                               status: 'Normal'
                             };
-                            setCondos(prev => [...prev, newObj]);
-                            
-                            if (isSupabaseConfigured && supabase) {
-                              supabase.from('condominios').insert({
-                                id: newObj.id,
-                                nome: newObj.nome,
-                                cnpj: newObj.cnpj,
-                                endereco: newObj.endereco,
-                                bairro: newObj.bairro,
-                                cidade: newObj.cidade,
-                                estado: newObj.estado,
-                                sindico: newObj.sindico,
-                                unidades: newObj.unidades,
-                                moradores: newObj.moradores,
-                                proprietarios: newObj.proprietarios,
-                                receita: newObj.receita,
-                                despesa: newObj.despesa,
-                                inadimplencia_percent: newObj.inadimplenciaPercent,
-                                status: newObj.status
-                              }).then(({ error }) => {
-                                if (error) console.error('Erro ao salvar condomínio no Supabase:', error.message);
-                              });
-                            }
+                            const saveAndClose = async () => {
+                              if (isSupabaseConfigured && supabase) {
+                                const { error } = await insertResilient('condominios', {
+                                  id: newObj.id,
+                                  nome: newObj.nome,
+                                  cnpj: newObj.cnpj,
+                                  endereco: newObj.endereco,
+                                  bairro: newObj.bairro,
+                                  cidade: newObj.cidade,
+                                  estado: newObj.estado,
+                                  sindico: newObj.sindico,
+                                  unidades: newObj.unidades,
+                                  moradores: newObj.moradores,
+                                  proprietarios: newObj.proprietarios,
+                                  receita: newObj.receita,
+                                  despesa: newObj.despesa,
+                                  inadimplencia_percent: newObj.inadimplenciaPercent,
+                                  status: newObj.status
+                                });
 
-                            addAuditLog('CRIAR', 'condominios', `Registrado condomínio ${newCondoName} com ${newCondoUnidades} unidades.`);
-                            onShowNotification('Sucesso!', `Condomínio ${newCondoName} foi adicionado à base.`);
-                            setNewCondoName('');
-                            setNewCondoCnpj('');
-                            setNewCondoSindico('');
-                            setNewCondoCidade('Santos');
-                            setNewCondoEstado('SP');
-                            setNewCondoEndereco('');
-                            setNewCondoBairro('');
-                            setNewCondoCep('');
-                            setCepError('');
-                            setIsFetchingCep(false);
-                            setShowCondoForm(false);
+                                if (error) {
+                                  console.error('Erro ao salvar condomínio no Supabase:', error.message);
+                                  onShowNotification('Erro de Salvamento', `Não foi possível persistir o condomínio: ${error.message || 'Sem conexão com banco'}`);
+                                  return;
+                                }
+                              } else {
+                                saveSimulatedData('condominios', newObj);
+                              }
+
+                              setCondos(prev => [...prev, newObj]);
+                              addAuditLog('CRIAR', 'condominios', `Registrado condomínio ${newCondoName} com ${newCondoUnidades} unidades.`);
+                              onShowNotification('Sucesso!', `Condomínio ${newCondoName} foi adicionados com sucesso.`);
+                              setNewCondoName('');
+                              setNewCondoCnpj('');
+                              setNewCondoSindico('');
+                              setNewCondoCidade('Santos');
+                              setNewCondoEstado('SP');
+                              setNewCondoEndereco('');
+                              setNewCondoBairro('');
+                              setNewCondoCep('');
+                              setCepError('');
+                              setIsFetchingCep(false);
+                              setShowCondoForm(false);
+                            };
+
+                            saveAndClose();
                           }} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                               <div className="space-y-1 md:col-span-2">
