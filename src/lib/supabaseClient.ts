@@ -297,41 +297,25 @@ CREATE TABLE IF NOT EXISTS tickets (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 5. Tabela de Perfis de Usuários (Tabela Primária 'perfis' para compatibilidade do app)
-CREATE TABLE IF NOT EXISTS perfis (
-  id UUID PRIMARY KEY,
-  auth_user_id UUID NOT NULL,
-  nome TEXT NOT NULL,
-  cpf TEXT,
-  email TEXT NOT NULL,
-  unidade TEXT,
-  tipo TEXT NOT NULL, -- administrador, colaborador, sindico, etc.
-  perfil TEXT, -- fallback/alias
-  data_cadastro TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- Caso a tabela perfis já exista de criações passadas, garanta que suas colunas adicionais existam:
-ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS cpf TEXT;
-ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS unidade TEXT;
-ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS perfil TEXT;
-ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS sobrenome TEXT;
-ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS apelido TEXT;
-ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS foto_perfil TEXT;
-ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS whatsapp TEXT;
-
--- 5b. Tabela 'perfil' (Singular) - Conforme solicitado para compatibilidade direta e trigger dedicada
+-- 5. Tabela de Perfis de Usuários (Tabela Única 'perfil' conforme solicitado)
 CREATE TABLE IF NOT EXISTS perfil (
   id UUID PRIMARY KEY,
   nome TEXT NOT NULL,
   email TEXT NOT NULL,
   cpf TEXT,
-  tipo TEXT NOT NULL,
+  tipo TEXT NOT NULL, -- administrador, colaborador, sindico, etc. (Vinculado a 'tipos_perfil')
   unidade TEXT,
+  sobrenome TEXT,
+  apelido TEXT,
+  foto_perfil TEXT,
+  telefone TEXT,
+  whatsapp TEXT,
+  ativo BOOLEAN DEFAULT true,
+  condominio_id TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- Garante que todas as colunas existem na tabela 'perfil' (singular)
-ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS id UUID;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS nome TEXT;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS cpf TEXT;
@@ -342,6 +326,53 @@ ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS apelido TEXT;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS foto_perfil TEXT;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS telefone TEXT;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS condominio_id TEXT;
+
+-- 5b. Tabela para os Tipos de Perfis (Roles) para o Admin adicionar, editar e cancelar
+CREATE TABLE IF NOT EXISTS tipos_perfil (
+  id SERIAL PRIMARY KEY,
+  nome TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL, -- Identificador da role (ex: 'administrador', 'sindico', 'morador')
+  descricao TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Populando com as opções padrões iniciais de tipos de perfis
+INSERT INTO public.tipos_perfil (nome, slug, descricao) VALUES
+  ('Administrador', 'administrador', 'Controle Total Master'),
+  ('Síndico', 'sindico', 'Gestor Geral do Condomínio'),
+  ('Morador', 'morador', 'Apenas Consulta e Unidade'),
+  ('Proprietário', 'proprietario', 'Condômino Donatário'),
+  ('Subsíndico', 'subsindico', 'Apoio Setorial de Gestão'),
+  ('Conselheiro', 'conselheiro', 'Fiscal e Auditor Read-Only'),
+  ('Porteiro', 'porteiro', 'Controle de Acesso de Portaria'),
+  ('Colaborador', 'colaborador', 'Prestador Interno')
+ON CONFLICT (slug) DO NOTHING;
+
+-- Remove a tabela física 'perfis' (caso exista) pois AGORA TEMOS APENAS A 'perfil' para cadastros
+DROP TABLE IF EXISTS public.perfis CASCADE;
+
+-- Criamos a VIEW 'perfis' apontando para 'perfil' para manter total retrocompatibilidade no frontend
+CREATE OR REPLACE VIEW public.perfis AS
+SELECT 
+  id,
+  id AS auth_user_id,
+  nome,
+  cpf,
+  email,
+  unidade,
+  tipo,
+  tipo AS perfil,
+  created_at AS data_cadastro,
+  sobrenome,
+  apelido,
+  foto_perfil,
+  whatsapp,
+  telefone,
+  ativo,
+  condominio_id
+FROM public.perfil;
 
 -- 6. Tabela de Condomínios
 CREATE TABLE IF NOT EXISTS condominios (
@@ -564,7 +595,7 @@ RETURNS boolean AS $$
 DECLARE
   v_ativo boolean;
 BEGIN
-  SELECT COALESCE(ativo, true) INTO v_ativo FROM public.perfis WHERE id = user_id;
+  SELECT COALESCE(ativo, true) INTO v_ativo FROM public.perfil WHERE id = user_id;
   RETURN COALESCE(v_ativo, true);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -745,27 +776,13 @@ CREATE POLICY "Todos podem ler o síndico de seu condomínio" ON sindico
 CREATE POLICY "Permitir tudo para simulação de sindico" ON sindico FOR ALL USING (true);
 
 
--- 16. Trigger automático de Sincronização de Cadastro pós-Auth (Grava em perfis e perfil)
+-- 16. Trigger automático de Sincronização de Cadastro pós-Auth (Grava unicamente em perfil)
 -- Execute este bloco para garantir que, caso o e-mail exija confirmação,
 -- o perfil correspondente seja injetado direto no banco pelo servidor Postgres.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  -- Inserção na tabela 'perfis' (plural) usada pelo aplicativo
-  INSERT INTO public.perfis (id, auth_user_id, nome, cpf, email, unidade, tipo, perfil)
-  VALUES (
-    new.id,
-    new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', coalesce(new.raw_user_meta_data->>'nome', 'Usuário Novo')),
-    coalesce(new.raw_user_meta_data->>'cpf', ''),
-    new.email,
-    coalesce(new.raw_user_meta_data->>'unit', coalesce(new.raw_user_meta_data->>'unidade', 'Apto Geral')),
-    coalesce(lower(replace(replace(replace(new.raw_user_meta_data->>'profile', 'síndico', 'sindico'), 'subsíndico', 'subsindico'), 'proprietário', 'proprietario')), 'morador'),
-    coalesce(new.raw_user_meta_data->>'profile', 'Morador')
-  )
-  ON CONFLICT (id) DO NOTHING;
-
-  -- Inserção na tabela 'perfil' (singular) com as colunas: id, nome, email, cpf, tipo, unidade
+  -- Inserção APENAS na tabela física 'perfil' (singular) conforme solicitado
   INSERT INTO public.perfil (id, nome, email, cpf, tipo, unidade)
   VALUES (
     new.id,

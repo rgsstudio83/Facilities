@@ -267,18 +267,12 @@ export default function CondoDetailsView({
           .delete()
           .eq('condominio_id', condo.id);
 
-        // Delete from 'perfil' and 'perfis'
+        // Delete from 'perfil'
         await supabase
           .from('perfil')
           .delete()
           .eq('tipo', 'sindico')
           .or(`unidade.eq.Condomínio: ${condo.nome},unidade.eq.Condomínio: ${condo.id}`);
-
-        await supabase
-          .from('perfis')
-          .delete()
-          .eq('tipo', 'sindico')
-          .or(`unidade.eq.Condomínio: ${condo.nome},condominio_id.eq.${condo.id}`);
 
         // Update 'condominios' to remove visual reference
         await supabase
@@ -395,23 +389,6 @@ export default function CondoDetailsView({
           condominio_id: condo.id
         });
 
-        await supabase.from('perfis').upsert({
-          id: targetId,
-          auth_user_id: targetId,
-          nome: syndicName,
-          sobrenome: syndicLastName,
-          apelido: syndicNickname,
-          cpf: formattedCpf,
-          foto_perfil: syndicPhoto || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-          telefone: syndicPhone,
-          whatsapp: syndicWhatsapp,
-          email: syndicEmail,
-          tipo: 'sindico',
-          perfil: 'Síndico',
-          unidade: `Condomínio: ${condo.nome}`,
-          condominio_id: condo.id
-        });
-
         await supabase.from('perfil').upsert({
           id: targetId,
           nome: syndicName,
@@ -423,7 +400,8 @@ export default function CondoDetailsView({
           whatsapp: syndicWhatsapp,
           email: syndicEmail,
           tipo: 'sindico',
-          unidade: `Condomínio: ${condo.nome}`
+          unidade: `Condomínio: ${condo.nome}`,
+          condominio_id: condo.id
         });
 
         const fullNameCombined = `${syndicName} ${syndicLastName}`.trim();
@@ -773,20 +751,7 @@ export default function CondoDetailsView({
         if (signUpData?.user) {
           authUserGuid = signUpData.user.id;
 
-          // 2. Vincular usuário nas tabelas de perfis
-          const profilePayload = {
-            id: authUserGuid,
-            auth_user_id: authUserGuid,
-            nome: resName.trim(),
-            email: resEmail.trim(),
-            unidade: resUnit,
-            tipo: 'morador',
-            perfil: 'Morador',
-            ativo: resStatus === 'Ativo',
-            condominio_id: condo.id
-          };
-
-          await supabase.from('perfis').upsert(profilePayload);
+          // 2. Vincular usuário na única tabela 'perfil'
           await supabase.from('perfil').upsert({
             id: authUserGuid,
             nome: resName.trim(),

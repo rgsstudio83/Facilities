@@ -588,6 +588,16 @@ export default function AdminDashboardModal({
             setProfilesList(defaultSimPerfis);
           }
         }
+
+        // Fetch de tipos_perfil cadastrados
+        const { data: dbRoleTypes, error: errRoleTypes } = await supabase.from('tipos_perfil').select('*');
+        if (dbRoleTypes && !errRoleTypes) {
+          setRoleTypes(dbRoleTypes.map((rt: any) => ({
+            id: rt.slug || rt.id.toString(),
+            nome: rt.nome,
+            descricao: rt.descricao || ''
+          })));
+        }
       } catch (err) {
         console.warn('Erro ao ler tabelas administrativas no Supabase:', err);
       } finally {
@@ -1209,7 +1219,6 @@ export default function AdminDashboardModal({
           ativo: newProfileAtivo,
           condominio_id: newProfileCondoId
         };
-        await supabase.from('perfis').upsert(payload);
         await supabase.from('perfil').upsert({
           id: targetId,
           nome: newProfileNome,
@@ -1262,7 +1271,6 @@ export default function AdminDashboardModal({
     // Deleta do Supabase se houver conexão
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from('perfis').delete().eq('id', id);
         await supabase.from('perfil').delete().eq('id', id);
       } catch (err: any) {
         console.error('Erro ao excluir perfil no Supabase:', err.message);
@@ -1280,7 +1288,7 @@ export default function AdminDashboardModal({
     onShowMessage("Sucesso", "Perfil removido do sistema.");
   };
 
-  const handleCreateOrUpdateRoleType = (e: FormEvent) => {
+  const handleCreateOrUpdateRoleType = async (e: FormEvent) => {
     e.preventDefault();
     if (activeProfile !== 'admin') {
       onShowMessage("Bloqueio de Permissão", "Apenas o perfil Administrador pode adicionar ou editar tipos de role.");
@@ -1293,6 +1301,27 @@ export default function AdminDashboardModal({
     }
 
     const formattedId = newRoleTypeId.trim().toLowerCase().replace(/\s+/g, '-');
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        if (selectedRoleTypeId) {
+          const { error } = await supabase.from('tipos_perfil').update({
+            nome: newRoleTypeNome.trim(),
+            descricao: newRoleTypeDescricao.trim()
+          }).eq('slug', selectedRoleTypeId);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('tipos_perfil').insert({
+            nome: newRoleTypeNome.trim(),
+            slug: formattedId,
+            descricao: newRoleTypeDescricao.trim()
+          });
+          if (error) throw error;
+        }
+      } catch (dbErr: any) {
+        console.error('Erro ao salvar no Supabase tipos_perfil:', dbErr.message);
+      }
+    }
 
     if (selectedRoleTypeId) {
       // Editing
@@ -1360,6 +1389,12 @@ export default function AdminDashboardModal({
   const confirmDeleteRoleType = () => {
     if (!roleTypeToDelete) return;
     const { id, nome } = roleTypeToDelete;
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('tipos_perfil').delete().eq('slug', id).then(({ error }) => {
+        if (error) console.error('Erro ao deletar tipos_perfil no Supabase:', error.message);
+      });
+    }
 
     const updatedList = roleTypes.filter(rt => rt.id !== id);
     setRoleTypes(updatedList);

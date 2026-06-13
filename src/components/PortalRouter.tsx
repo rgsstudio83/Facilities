@@ -60,15 +60,15 @@ export async function getCurrentProfile() {
 // Query profiles table and support standard and fallback schemas
 async function queryPerfisTable(userId: string): Promise<UserProfile | null> {
   try {
-    // 1. obter usuário autenticado e buscar na tabela perfis com select('*') para tolerar qualquer estrutura de colunas do banco
+    // 1. obter usuário autenticado e buscar na tabela perfil única
     const { data, error } = await supabase
-      .from('perfis')
+      .from('perfil')
       .select('*')
-      .eq('auth_user_id', userId)
+      .eq('id', userId)
       .maybeSingle();
 
     if (error || !data) {
-      // 2. try fallback to id primary key matching
+      // 2. try fallback to view perfis
       const { data: fallbackIdData, error: fbError } = await supabase
         .from('perfis')
         .select('*')
@@ -83,7 +83,7 @@ async function queryPerfisTable(userId: string): Promise<UserProfile | null> {
 
     return mapDbProfileToInterface(data);
   } catch (err) {
-    console.error('Falha de leitura na tabela perfis:', err);
+    console.error('Falha de leitura na tabela perfil:', err);
     return null;
   }
 }
@@ -178,20 +178,19 @@ export async function ensureAndGetProfile(authUser: any): Promise<UserProfile | 
       console.warn('Erro ao atualizar cache local de CPF em ensureAndGetProfile:', e);
     }
 
-    // Tenta inserir o perfil completo com permissão do usuário autenticado no RLS
-    let { error: insertError } = await supabase.from('perfis').upsert(insertPayload);
+    // Tenta inserir o perfil completo com permissão do usuário autenticado no RLS (na tabela única perfil)
+    let { error: insertError } = await supabase.from('perfil').upsert(insertPayload);
     
     if (insertError) {
       console.warn('[ensureAndGetProfile] Erro ao criar perfil completo, tentando versão simplificada:', insertError.message);
       // Fallback simplificado se o banco de dados tiver esquemas estritos ou restrições de coluna
       const corePayload = {
         id: authUser.id,
-        auth_user_id: authUser.id,
         nome: name,
         email: email,
         tipo: normalizedRole
       };
-      const { error: coreError } = await supabase.from('perfis').upsert(corePayload);
+      const { error: coreError } = await supabase.from('perfil').upsert(corePayload);
       insertError = coreError;
     }
 
@@ -696,27 +695,26 @@ export function PortalRouterProvider({
           console.warn('Erro ao atualizar cache local de CPFs em signUp:', cacheErr);
         }
 
-        // tenta inserir o payload completo primeiro
-        let { error: insertError } = await supabase.from('perfis').upsert(fullPayload);
+        // tenta inserir o payload completo primeiro na tabela única perfil
+        let { error: insertError } = await supabase.from('perfil').upsert(fullPayload);
 
         // Se falhar por incompatibilidade de tabela de produção, tentamos apenas com os campos essenciais que existem em ambos os esquemas
         if (insertError) {
           console.warn('Upsert completo do perfil falhou, tentando apenas com colunas principais de produção:', insertError.message);
           const corePayload = {
             id: data.user.id,
-            auth_user_id: data.user.id,
             nome: name.trim(),
             email: email.trim(),
             tipo: normalizedRole
           };
-          const { error: coreInsertError } = await supabase.from('perfis').upsert(corePayload);
+          const { error: coreInsertError } = await supabase.from('perfil').upsert(corePayload);
           insertError = coreInsertError;
         }
 
         if (insertError) {
           console.error('Falha ao gravar perfil no DB real do Supabase:', insertError.message);
         } else {
-          triggerNotification('Cadastro Realizado!', 'Sua conta foi criada no Supabase e associada na tabela de Perfis.');
+          triggerNotification('Cadastro Realizado!', 'Sua conta foi criada no Supabase e associada na tabela de Perfil.');
         }
         
         // Log in immediately to establish session. If email confirmation is enabled on Supabase,
@@ -924,15 +922,13 @@ export function PortalRouterProvider({
           .replace('proprietário', 'proprietario')
           .trim();
 
-        await supabase.from('perfis').insert({
+        await supabase.from('perfil').insert({
           id: data.user.id,
-          auth_user_id: data.user.id,
           nome: name.trim(),
           cpf: cpf.trim(),
           email: email.trim(),
           unidade: unit.trim(),
-          tipo: normalizedRole,
-          perfil: role
+          tipo: normalizedRole
         });
 
         triggerNotification('Criado com Sucesso', `Usuário ${name} cadastrado com credenciais de ${role}.`);
