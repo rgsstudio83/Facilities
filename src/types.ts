@@ -56,3 +56,17 @@ export interface ContactMessage {
   data: string;
 }
 
+export interface Sindico {
+  id?: string;
+  nome: string;
+  sobrenome?: string;
+  apelido?: string;
+  cpf?: string;
+  foto_url?: string;
+  telefone?: string;
+  whatsapp?: string;
+  condominio_id?: string;
+  email?: string;
+}
+
+

@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, supabaseUrl, supabaseAnonKey, insertResilient } from '../lib/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
+import CondoDetailsView from './CondoDetailsView';
 
 const generateUUID = (): string => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -98,6 +99,8 @@ interface UserProfile {
   unidade?: string;
   tipo: string;
   perfil?: string;
+  ativo?: boolean;
+  condominio_id?: string;
 }
 
 interface Condominio {
@@ -223,6 +226,27 @@ export default function AdminDashboardModal({
   const [isFetchingCep, setIsFetchingCep] = useState(false);
   const [cepError, setCepError] = useState('');
   const [showCondoForm, setShowCondoForm] = useState(false);
+
+  // Editing Condominium states inside AdminDashboardModal
+  const [editingCondo, setEditingCondo] = useState<any | null>(null);
+  const [editCondoName, setEditCondoName] = useState('');
+  const [editCondoCnpj, setEditCondoCnpj] = useState('');
+  const [editCondoCep, setEditCondoCep] = useState('');
+  const [editCondoEndereco, setEditCondoEndereco] = useState('');
+  const [editCondoBairro, setEditCondoBairro] = useState('');
+  const [editCondoCidade, setEditCondoCidade] = useState('Santos');
+  const [editCondoEstado, setEditCondoEstado] = useState('SP');
+  const [editCondoSindico, setEditCondoSindico] = useState('');
+  const [editCondoBlocos, setEditCondoBlocos] = useState(2);
+  const [editCondoUnidades, setEditCondoUnidades] = useState(80);
+  const [editCondoMoradores, setEditCondoMoradores] = useState(224);
+  const [editCondoProprietarios, setEditCondoProprietarios] = useState(76);
+  const [editCondoReceita, setEditCondoReceita] = useState(60000);
+  const [editCondoDespesa, setEditCondoDespesa] = useState(49600);
+  const [editCondoStatus, setEditCondoStatus] = useState('Normal');
+  const [isFetchingEditCep, setIsFetchingEditCep] = useState(false);
+  const [editCepError, setEditCepError] = useState('');
+
   const [showMoradorForm, setShowMoradorForm] = useState(false);
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [showRoleTypeForm, setShowRoleTypeForm] = useState(false);
@@ -238,6 +262,8 @@ export default function AdminDashboardModal({
   const [newProfileUnidade, setNewProfileUnidade] = useState('');
   const [newProfileTipo, setNewProfileTipo] = useState('morador');
   const [newProfilePassword, setNewProfilePassword] = useState('');
+  const [newProfileAtivo, setNewProfileAtivo] = useState(true);
+  const [newProfileCondoId, setNewProfileCondoId] = useState('cd-1');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
 
   // Role Types Dynamic States & Forms definition
@@ -250,6 +276,14 @@ export default function AdminDashboardModal({
   // Delete Role Confirmation modal state
   const [isConfirmDeleteRoleModalOpen, setIsConfirmDeleteRoleModalOpen] = useState(false);
   const [roleTypeToDelete, setRoleTypeToDelete] = useState<{ id: string; nome: string } | null>(null);
+
+  // General deletion confirm modal state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   // Bulk add residents state variables
   const [isBulkAddMoradoresOpen, setIsBulkAddMoradoresOpen] = useState(false);
@@ -781,6 +815,126 @@ export default function AdminDashboardModal({
     onShowMessage("Sucesso", "Condomínio desativado do sistema.");
   };
 
+  const [editCondoInadimplencia, setEditCondoInadimplencia] = useState(5.0);
+
+  const startEditingCondo = (item: any) => {
+    setEditingCondo(item);
+    setEditCondoName(item.nome || '');
+    setEditCondoCnpj(item.cnpj || '');
+    setEditCondoCep(item.cep || item.cnpj?.substring(0, 5) || '');
+    setEditCondoEndereco(item.endereco || '');
+    setEditCondoBairro(item.bairro || '');
+    setEditCondoCidade(item.cidade || 'Santos');
+    setEditCondoEstado(item.estado || 'SP');
+    setEditCondoSindico(item.sindico || 'Administradora Facilities');
+    setEditCondoBlocos(Number(item.blocosCount || 2));
+    setEditCondoUnidades(Number(item.unidades || 80));
+    setEditCondoMoradores(Number(item.moradores || Math.round((Number(item.unidades) || 80) * 2.8)));
+    setEditCondoProprietarios(Number(item.proprietarios || Math.round((Number(item.unidades) || 80) * 0.95)));
+    setEditCondoReceita(Number(item.receita || 60000));
+    setEditCondoDespesa(Number(item.despesa || 49600));
+    setEditCondoInadimplencia(Number(item.inadimplenciaPercent || 5.0));
+    setEditCondoStatus(item.status || 'Normal');
+  };
+
+  const handleEditCepChange = async (val: string) => {
+    const formatted = val.replace(/\D/g, '').replace(/^(\d{5})(\d{3})/, '$1-$2');
+    setEditCondoCep(formatted);
+    const numeric = val.replace(/\D/g, '');
+    if (numeric.length === 8) {
+      setIsFetchingEditCep(true);
+      setEditCepError('');
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${numeric}/json/`);
+        const data = await res.json();
+        if (data.erro) {
+          setEditCepError('Não encontrado');
+        } else {
+          setEditCondoEndereco(data.logradouro || '');
+          setEditCondoBairro(data.bairro || '');
+          if (data.localidade) setEditCondoCidade(data.localidade);
+          if (data.uf) setEditCondoEstado(data.uf);
+        }
+      } catch (err) {
+        setEditCepError('Erro');
+      } finally {
+        setIsFetchingEditCep(false);
+      }
+    }
+  };
+
+  const handleSaveEditCondo = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editCondoName.trim()) {
+      onShowMessage("Erro de Validação", "Por favor, defina o Nome do condomínio.");
+      return;
+    }
+
+    const sanitizedCnpj = editCondoCnpj.replace(/\D/g, '');
+    const updatedObj: Condominio = {
+      ...editingCondo,
+      nome: editCondoName,
+      cnpj: editCondoCnpj,
+      cep: editCondoCep,
+      endereco: editCondoEndereco,
+      bairro: editCondoBairro,
+      cidade: editCondoCidade,
+      estado: editCondoEstado,
+      sindico: editCondoSindico || 'Administradora Facilities',
+      unidades: Number(editCondoUnidades) || 80,
+      moradores: Number(editCondoMoradores) || 224,
+      proprietarios: Number(editCondoProprietarios) || 76,
+      receita: Number(editCondoReceita) || 60000,
+      despesa: Number(editCondoDespesa) || 49600,
+      inadimplenciaPercent: Number(editCondoInadimplencia) || 5.2,
+      status: editCondoStatus as any
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('condominios')
+          .update({
+            nome: editCondoName,
+            cnpj: editCondoCnpj,
+            endereco: editCondoEndereco,
+            bairro: editCondoBairro,
+            cidade: editCondoCidade,
+            estado: editCondoEstado,
+            sindico: editCondoSindico,
+            unidades: Number(editCondoUnidades),
+            moradores: Number(editCondoMoradores),
+            proprietarios: Number(editCondoProprietarios),
+            receita: Number(editCondoReceita),
+            despesa: Number(editCondoDespesa),
+            inadimplencia_percent: Number(editCondoInadimplencia),
+            status: editCondoStatus
+          })
+          .eq('id', editingCondo.id);
+
+        if (error) {
+          console.error('Erro ao atualizar no Supabase:', error.message);
+          onShowMessage("Erro de Gravação", `Não foi possível atualizar no Supabase: ${error.message}`);
+          return;
+        }
+      } catch (err: any) {
+        console.error('Conexão instável com Supabase:', err);
+      }
+    }
+
+    setCondos(prev => {
+      const list = prev.map(c => c.id === updatedObj.id ? updatedObj : c);
+      if (!isSupabaseConfigured || !supabase) {
+        localStorage.setItem('supabase_sim_condominios', JSON.stringify(list));
+      }
+      return list;
+    });
+
+    addAuditLog('EDITAR', 'condominios', `Atualizado dados do condomínio: ${editCondoName}`);
+    onShowMessage("Sucesso", "Informações do condomínio atualizadas com sucesso.");
+    setEditingCondo(null);
+  };
+
   const handleCreateMorador = (e: FormEvent) => {
     e.preventDefault();
     if (!verifyWritePermission(['admin', 'colaborador'], 'Cadastrar Morador')) return;
@@ -990,31 +1144,33 @@ export default function AdminDashboardModal({
     }
 
     // Salva no repositório de simulação offline de usuários (facilities_portal_users) para login local fallback
-    if (!isEdit) {
-      try {
-        const savedUsers = localStorage.getItem('facilities_portal_users');
-        let users = [];
-        if (savedUsers) {
-          try { users = JSON.parse(savedUsers); } catch { users = []; }
-        }
-        const newUserSim = {
-          cpf: formattedCpf,
-          email: newProfileEmail.trim(),
-          pass: newProfilePassword || '123456',
-          name: newProfileNome.trim(),
-          unit: newProfileUnidade || 'Apto Geral',
-          profile: resolvedPerfil
-        };
-        const uIdx = users.findIndex((u: any) => u.email.toLowerCase() === newProfileEmail.trim().toLowerCase());
-        if (uIdx !== -1) {
-          users[uIdx] = newUserSim;
-        } else {
-          users.push(newUserSim);
-        }
-        localStorage.setItem('facilities_portal_users', JSON.stringify(users));
-      } catch (err) {
-        console.warn('Erro ao atualizar base de credenciais local:', err);
+    try {
+      const savedUsers = localStorage.getItem('facilities_portal_users');
+      let users = [];
+      if (savedUsers) {
+        try { users = JSON.parse(savedUsers); } catch { users = []; }
       }
+      const uIdx = users.findIndex((u: any) => u.email.toLowerCase() === newProfileEmail.trim().toLowerCase());
+      const existingPass = (uIdx !== -1) ? (users[uIdx].pass || '123456') : '123456';
+
+      const newUserSim = {
+        cpf: formattedCpf,
+        email: newProfileEmail.trim(),
+        pass: newProfilePassword || existingPass,
+        name: newProfileNome.trim(),
+        unit: newProfileUnidade || 'Apto Geral',
+        profile: resolvedPerfil,
+        ativo: newProfileAtivo,
+        condominio_id: newProfileCondoId
+      };
+      if (uIdx !== -1) {
+        users[uIdx] = newUserSim;
+      } else {
+        users.push(newUserSim);
+      }
+      localStorage.setItem('facilities_portal_users', JSON.stringify(users));
+    } catch (err) {
+      console.warn('Erro ao atualizar base de credenciais local:', err);
     }
 
     const profileData: UserProfile = {
@@ -1025,15 +1181,17 @@ export default function AdminDashboardModal({
       cpf: formattedCpf,
       unidade: newProfileUnidade || 'Apto Geral',
       tipo: cleanTipo,
-      perfil: resolvedPerfil
+      perfil: resolvedPerfil,
+      ativo: newProfileAtivo,
+      condominio_id: newProfileCondoId
     };
 
     if (isEdit) {
       setProfilesList(prev => prev.map(p => p.id === targetId ? profileData : p));
-      addAuditLog('EDITAR', 'perfis', `Atualizado perfil do usuário: ${newProfileNome} para role ${resolvedPerfil}`);
+      addAuditLog('EDITAR', 'perfis', `Atualizado perfil do usuário: ${newProfileNome} para role ${resolvedPerfil} (Ativo: ${newProfileAtivo})`);
     } else {
       setProfilesList(prev => [profileData, ...prev]);
-      addAuditLog('CRIAR', 'perfis', `Criado novo perfil de usuário: ${newProfileNome} com role ${resolvedPerfil}`);
+      addAuditLog('CRIAR', 'perfis', `Criado novo perfil de usuário: ${newProfileNome} com role ${resolvedPerfil} (Ativo: ${newProfileAtivo})`);
     }
 
     // Persiste no Supabase se houver conexão
@@ -1047,7 +1205,9 @@ export default function AdminDashboardModal({
           cpf: formattedCpf,
           unidade: newProfileUnidade || 'Apto Geral',
           tipo: cleanTipo,
-          perfil: resolvedPerfil
+          perfil: resolvedPerfil,
+          ativo: newProfileAtivo,
+          condominio_id: newProfileCondoId
         };
         await supabase.from('perfis').upsert(payload);
         await supabase.from('perfil').upsert({
@@ -1056,7 +1216,9 @@ export default function AdminDashboardModal({
           email: newProfileEmail,
           cpf: formattedCpf,
           tipo: cleanTipo,
-          unidade: newProfileUnidade || 'Apto Geral'
+          unidade: newProfileUnidade || 'Apto Geral',
+          ativo: newProfileAtivo,
+          condominio_id: newProfileCondoId
         });
       } catch (err: any) {
         console.error('Erro ao salvar perfil no Supabase:', err.message);
@@ -1082,6 +1244,8 @@ export default function AdminDashboardModal({
     setNewProfileCpf('');
     setNewProfileUnidade('');
     setNewProfileTipo('morador');
+    setNewProfileAtivo(true);
+    setNewProfileCondoId('cd-1');
     setSelectedProfileId(null);
     setShowProfileForm(false);
   };
@@ -1639,53 +1803,20 @@ export default function AdminDashboardModal({
 
               {/* 1. VIEW DETAILED INDIVIDUAL CONDOMINIUM */}
               {selectedCondoId && activeDetailedCondo ? (
-                <div className="space-y-6">
-                  <button
-                    onClick={() => setSelectedCondoId(null)}
-                    className="flex items-center gap-1.5 text-xs font-bold text-[#0E7C66] hover:underline cursor-pointer border-0 bg-transparent text-left"
-                  >
-                    <ArrowLeft className="w-4 h-4" /> Voltar ao Painel Geral
-                  </button>
-
-                  <div className="bg-white p-6 rounded-3xl border border-[#E2E8F0] shadow-sm text-left grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="md:col-span-2 space-y-3">
-                      <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full font-bold border border-emerald-500/10">INFO SENSÍVEL DE RLS</span>
-                      <h3 className="text-2xl font-black text-[#0F172A] font-display">{activeDetailedCondo.nome}</h3>
-                      <p className="text-xs text-[#64748B] flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {activeDetailedCondo.endereco}, {activeDetailedCondo.cidade} ({activeDetailedCondo.estado})</p>
-                    </div>
-
-                    <div className="bg-[#0B1B2F] text-white p-5 rounded-2xl flex flex-col justify-between">
-                      <span className="text-[10px] text-gray-400 block tracking-wider uppercase font-bold">Faturamento Estimado</span>
-                      <h4 className="text-2xl font-black mt-2 text-emerald-400">R$ {activeDetailedCondo.receita.toLocaleString('pt-BR')}</h4>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
-                    <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-xs flex justify-between items-center">
-                      <div>
-                        <span className="text-[10px] text-[#64748B] uppercase font-bold block">Despesa Mensal</span>
-                        <h4 className="text-xl font-bold text-red-500 mt-1">R$ {activeDetailedCondo.despesa.toLocaleString('pt-BR')}</h4>
-                      </div>
-                      <TrendingDown className="w-8 h-8 text-red-500 bg-red-50 p-1.5 rounded-lg" />
-                    </div>
-
-                    <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-xs flex justify-between items-center">
-                      <div>
-                        <span className="text-[10px] text-[#64748B] uppercase font-bold block">Saldo Técnico</span>
-                        <h4 className="text-xl font-bold text-emerald-600 mt-1">R$ {(activeDetailedCondo.receita - activeDetailedCondo.despesa).toLocaleString('pt-BR')}</h4>
-                      </div>
-                      <TrendingUp className="w-8 h-8 text-emerald-500 bg-emerald-50 p-1.5 rounded-lg" />
-                    </div>
-
-                    <div className="bg-white p-5 rounded-2xl border border-[#E2E8F0] shadow-xs flex justify-between items-center">
-                      <div>
-                        <span className="text-[10px] text-[#64748B] uppercase font-bold block">Inadimplência</span>
-                        <h4 className="text-xl font-bold text-amber-500 mt-1">{activeDetailedCondo.inadimplenciaPercent}%</h4>
-                      </div>
-                      <AlertCircle className="w-8 h-8 text-amber-500 bg-amber-50 p-1.5 rounded-lg" />
-                    </div>
-                  </div>
-                </div>
+                <CondoDetailsView
+                  condo={activeDetailedCondo}
+                  onBack={() => setSelectedCondoId(null)}
+                  onEdit={(item) => {
+                    startEditingCondo(item);
+                  }}
+                  onDelete={(item) => {
+                    handleDeleteCondo(item.id, item.nome);
+                    setSelectedCondoId(null);
+                  }}
+                  onShowNotification={(headline, text) => {
+                    onShowMessage(headline, text);
+                  }}
+                />
               ) : (
                 <>
                   {/* 2. SUB-PAGE: SYSTEM-WIDE PREMIUM DASHBOARD */}
@@ -2251,99 +2382,21 @@ export default function AdminDashboardModal({
                       
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {visibleCondos.map(item => {
-                          const countMoradores = moradoresList.filter(m => m.condominioId === item.id).length;
                           return (
                             <div 
                               key={item.id} 
-                              className="bg-white p-6 rounded-[24px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] flex flex-col md:flex-row gap-6 justify-between items-stretch hover:shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all duration-300 group relative min-h-[220px]"
+                              onClick={() => setSelectedCondoId(item.id)}
+                              className="bg-white p-6 rounded-3xl border border-gray-200 hover:border-[#af101a]/40 shadow-xs hover:shadow-md hover:bg-stone-50/45 cursor-pointer flex flex-col text-left h-full group transition-all duration-200 active:scale-[0.99]"
+                              title="Clique de forma interativa para ver os detalhes completos deste condomínio"
                             >
-                              {/* Left Side: Identity and Basic Info */}
-                              <div className="flex-1 flex flex-col justify-between text-left">
-                                <div>
-                                  <div className="flex items-center gap-2.5">
-                                    <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
-                                      item.status === 'Normal' ? 'bg-emerald-50 text-emerald-600' :
-                                      item.status === 'Alerta' ? 'bg-amber-50 text-amber-600' :
-                                      'bg-red-50 text-red-650'
-                                    }`}>
-                                      {item.status}
-                                    </span>
-                                    <span className="text-[9px] text-gray-400 font-mono">ID: {item.id}</span>
-                                  </div>
-                                  
-                                  <h3 className="font-extrabold text-[#0F172A] text-base tracking-tight font-display mt-2.5 group-hover:text-primary transition-colors duration-200">
-                                    {item.nome}
-                                  </h3>
-                                  <p className="text-[10px] text-gray-400 font-mono mt-0.5">{item.cnpj}</p>
-
-                                  <div className="flex items-start gap-2 mt-4 text-xs text-stone-600">
-                                    <MapPin className="w-4 h-4 text-gray-450 shrink-0 mt-0.5" />
-                                    <div>
-                                      <p className="font-medium text-stone-850 leading-tight">{item.endereco}</p>
-                                      <p className="text-[10px] text-gray-400 mt-0.5">{item.bairro || '-'}, {item.cidade} / {item.estado}</p>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Actions row */}
-                                <div className="border-t border-gray-100 mt-4 pt-3 flex justify-between items-center text-xs">
-                                  {activeProfile === 'admin' ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteCondo(item.id, item.nome)}
-                                      className="text-red-650 hover:text-red-800 hover:bg-slate-50 p-2 rounded-xl transition-all duration-205 cursor-pointer flex items-center gap-1 border-0 bg-transparent"
-                                      title="Remover Condomínio"
-                                    >
-                                      <Trash2 className="w-4 h-4" /> <span className="text-[10px] font-bold uppercase tracking-wide">Excluir</span>
-                                    </button>
-                                  ) : (
-                                    <span className="text-[9px] text-gray-400 bg-gray-50 border border-gray-100 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 select-none">
-                                      <Lock className="w-3 h-3" /> Bloqueado RLS
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Right Side: Operational Stats / Counters */}
-                              <div className="w-full md:w-[240px] bg-slate-50/75 p-4 rounded-2xl flex flex-col justify-between border border-slate-100/40 shrink-0">
-                                <div className="space-y-2">
-                                  {/* Resident and Unit Stats Row */}
-                                  <div className="bg-white p-2.5 rounded-xl border border-slate-100 text-left flex items-center justify-between">
-                                    <div>
-                                      <span className="text-[9px] uppercase font-bold text-gray-450 block">Síndico Atribuído</span>
-                                      <span className="font-bold text-[#0F172A] text-xs truncate max-w-[130px] block mt-0.5" title={item.sindico}>
-                                        {item.sindico}
-                                      </span>
-                                    </div>
-                                    <UserCheck className="w-4 h-4 text-slate-400 shrink-0" />
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <div className="bg-white p-2.5 rounded-xl border border-slate-100 text-left">
-                                      <span className="text-[9px] uppercase font-bold text-gray-400 block">Unidades</span>
-                                      <span className="font-black text-[#0F172A] text-sm block mt-0.5">{item.unidades}</span>
-                                    </div>
-                                    <div className="bg-white p-2.5 rounded-xl border border-slate-100 text-left">
-                                      <span className="text-[9px] uppercase font-bold text-indigo-600 block flex items-center gap-1">
-                                        Moradores
-                                      </span>
-                                      <span className="font-black text-indigo-700 text-sm block mt-0.5">{countMoradores}</span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (!verifyWritePermission(['admin', 'colaborador', 'sindico', 'subsindico'], 'Verificar Permissão de Cadastro')) return;
-                                    setBulkAddCondoId(item.id);
-                                    setBulkAddRows([{ nome: '', unidade: '', cpf: '', proprietario: true, telefone: '(13) 99123-4567' }]);
-                                    setIsBulkAddMoradoresOpen(true);
-                                  }}
-                                  className="w-full mt-3 py-2.5 px-3 bg-[#4F46E5]/10 hover:bg-[#4F46E5]/20 text-[#4F46E5] text-xs font-bold rounded-xl transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer border-0 shadow-xs"
-                                >
-                                  <UserPlus className="w-4 h-4" /> Add Moradores Lote
-                                </button>
+                              <div className="space-y-3">
+                                <h3 className="font-sans font-bold text-[#101c29] text-lg leading-snug group-hover:text-[#af101a] transition-colors">
+                                  {item.nome}
+                                </h3>
+                                <p className="text-stone-500 font-medium text-xs leading-relaxed flex items-start gap-1.5">
+                                  <span className="text-gray-400 select-none shrink-0" aria-hidden="true">📍</span>
+                                  <span>{item.endereco}{item.bairro ? `, ${item.bairro}` : ''}</span>
+                                </p>
                               </div>
                             </div>
                           );
@@ -2634,6 +2687,33 @@ export default function AdminDashboardModal({
                             />
                           </div>
                           <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase block">Condomínio Vinculado *</label>
+                            <select
+                              required
+                              value={newProfileCondoId}
+                              onChange={(e) => setNewProfileCondoId(e.target.value)}
+                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-bold text-[#101c29] cursor-pointer"
+                            >
+                              {condos.map(c => (
+                                <option key={c.id} value={c.id}>
+                                  {c.nome}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase block">Acesso Ativo? *</label>
+                            <select
+                              required
+                              value={newProfileAtivo ? 'true' : 'false'}
+                              onChange={(e) => setNewProfileAtivo(e.target.value === 'true')}
+                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-bold text-[#101c29] cursor-pointer"
+                            >
+                              <option value="true">Sim (Ativo)</option>
+                              <option value="false">Não (Inativo)</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
                             <label className="text-[10px] font-bold text-gray-400 uppercase block">Papel de Acesso / Role *</label>
                             <select
                               required
@@ -2710,6 +2790,7 @@ export default function AdminDashboardModal({
                               <th className="py-2">CPF</th>
                               <th className="py-2">Unidade</th>
                               <th className="py-2">Role Atribuída</th>
+                              <th className="py-2">Status</th>
                               <th className="py-2 text-right">Ação</th>
                             </tr>
                           </thead>
@@ -2739,6 +2820,15 @@ export default function AdminDashboardModal({
                                       {item.perfil || item.tipo}
                                     </span>
                                   </td>
+                                  <td className="py-3">
+                                    <span className={`inline-block px-2 py-0.5 rounded text-[8.5px] font-bold uppercase border ${
+                                      item.ativo !== false 
+                                        ? 'bg-emerald-55/20 text-emerald-700 border-emerald-250/30' 
+                                        : 'bg-red-55/20 text-red-700 border-red-250/30'
+                                    }`}>
+                                      {item.ativo !== false ? 'Ativo' : 'Inativo'}
+                                    </span>
+                                  </td>
                                   <td className="py-3 text-right">
                                     {activeProfile === 'admin' ? (
                                       <div className="flex justify-end gap-2.5">
@@ -2750,6 +2840,8 @@ export default function AdminDashboardModal({
                                             setNewProfileCpf(item.cpf || '');
                                             setNewProfileUnidade(item.unidade || '');
                                             setNewProfileTipo(item.tipo);
+                                            setNewProfileAtivo(item.ativo !== false);
+                                            setNewProfileCondoId(item.condominio_id || 'cd-1');
                                             setShowProfileForm(true);
                                           }}
                                           className="text-amber-650 hover:text-amber-800 font-bold hover:underline bg-transparent border-none cursor-pointer"
@@ -2757,7 +2849,17 @@ export default function AdminDashboardModal({
                                           Editar
                                         </button>
                                         <button
-                                          onClick={() => handleDeleteProfile(item.id, item.nome)}
+                                          onClick={() => {
+                                            setDeleteConfirm({
+                                              isOpen: true,
+                                              title: 'Confirmar Exclusão de Perfil',
+                                              message: `Deseja realmente remover o perfil de "${item.nome}" (${item.email}) do sistema? Esta ação é irreversível.`,
+                                              onConfirm: () => {
+                                                handleDeleteProfile(item.id, item.nome);
+                                                setDeleteConfirm(null);
+                                              }
+                                            });
+                                          }}
                                           className="text-red-650 hover:text-red-800 font-bold hover:underline bg-transparent border-none cursor-pointer"
                                         >
                                           Remover
@@ -3390,6 +3492,233 @@ export default function AdminDashboardModal({
         </div>
       )}
 
+      {/* MODAL DE EDIÇÃO DE CONDOMÍNIO */}
+      {editingCondo && (
+        <div id="modal-edicao-condo" className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white w-full max-w-xl rounded-[28px] shadow-[0_24px_60px_-15px_rgba(0,0,0,0.35)] border border-gray-100 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <h4 className="text-xs font-extrabold text-[#101c29] uppercase tracking-wider flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-[#af101a]" /> Editar Condomínio
+              </h4>
+              <button
+                onClick={() => setEditingCondo(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full transition-colors cursor-pointer border-0 bg-transparent"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4 text-left">
+              <form onSubmit={handleSaveEditCondo} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Nome do Condomínio *</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Residencial Miramar"
+                      value={editCondoName}
+                      onChange={(e) => setEditCondoName(e.target.value)}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1 md:col-span-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">CNPJ *</label>
+                    <input
+                      type="text"
+                      placeholder="00.000.000/0001-00"
+                      value={editCondoCnpj}
+                      onChange={(e) => setEditCondoCnpj(formatCNPJ(e.target.value))}
+                      maxLength={18}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1 md:col-span-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between items-center">
+                      <span>CEP *</span>
+                      {isFetchingEditCep && <span className="text-[9px] text-blue-500 animate-pulse font-medium">Buscando...</span>}
+                      {editCepError && <span className="text-[9px] text-[#af101a] font-medium">{editCepError}</span>}
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={9}
+                      placeholder="00000-000"
+                      value={editCondoCep}
+                      onChange={(e) => handleEditCepChange(e.target.value)}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Endereço</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Av. Ana Costa, 142"
+                      value={editCondoEndereco}
+                      onChange={(e) => setEditCondoEndereco(e.target.value)}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Bairro</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Gonzaga"
+                      value={editCondoBairro}
+                      onChange={(e) => setEditCondoBairro(e.target.value)}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Cidade</label>
+                    <input
+                      type="text"
+                      value={editCondoCidade}
+                      onChange={(e) => setEditCondoCidade(e.target.value)}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Estado</label>
+                    <input
+                      type="text"
+                      maxLength={2}
+                      value={editCondoEstado}
+                      onChange={(e) => setEditCondoEstado(e.target.value.toUpperCase())}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Síndico Responsável</label>
+                    <input
+                      type="text"
+                      placeholder="Nome do Síndico ou Administradora"
+                      value={editCondoSindico}
+                      onChange={(e) => setEditCondoSindico(e.target.value)}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Status</label>
+                    <select
+                      value={editCondoStatus}
+                      onChange={(e) => setEditCondoStatus(e.target.value)}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29] cursor-pointer"
+                    >
+                      <option value="Normal">Normal</option>
+                      <option value="Alerta">Alerta</option>
+                      <option value="Crítico">Crítico</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Qtd Blocos</label>
+                    <input
+                      type="number"
+                      value={editCondoBlocos}
+                      onChange={(e) => setEditCondoBlocos(Number(e.target.value))}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Qtd Unidades</label>
+                    <input
+                      type="number"
+                      value={editCondoUnidades}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setEditCondoUnidades(val);
+                        setEditCondoMoradores(Math.round(val * 2.8));
+                        setEditCondoProprietarios(Math.round(val * 0.95));
+                      }}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Moradores</label>
+                    <input
+                      type="number"
+                      value={editCondoMoradores}
+                      onChange={(e) => setEditCondoMoradores(Number(e.target.value))}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Inadimplência %</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={editCondoInadimplencia}
+                      onChange={(e) => setEditCondoInadimplencia(Number(e.target.value))}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Receita (R$)</label>
+                    <input
+                      type="number"
+                      value={editCondoReceita}
+                      onChange={(e) => setEditCondoReceita(Number(e.target.value))}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Despesa (R$)</label>
+                    <input
+                      type="number"
+                      value={editCondoDespesa}
+                      onChange={(e) => setEditCondoDespesa(Number(e.target.value))}
+                      className="w-full bg-[#f8f9ff] border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-primary text-[#101c29]"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50 -mx-6 -mb-6 p-6">
+                  <button
+                    type="button"
+                    onClick={() => setEditingCondo(null)}
+                    className="px-5 py-2.5 border border-gray-200 text-[#101c29] text-xs font-bold rounded-lg hover:bg-gray-50 transition-colors cursor-pointer bg-white"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-[#af101a] text-white text-xs font-bold rounded-lg hover:bg-[#930010] transition-colors cursor-pointer border-0"
+                  >
+                    Salvar Alterações
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE ROLE */}
       {isConfirmDeleteRoleModalOpen && roleTypeToDelete && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#010811]/70 backdrop-blur-sm p-4">
@@ -3429,6 +3758,44 @@ export default function AdminDashboardModal({
                 className="px-5 py-2 bg-[#af101a] hover:bg-red-800 text-white text-xs font-bold rounded-xl transition-all duration-150 cursor-pointer"
               >
                 Sim, Excluir Role
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GLOBAL DELETE CONFIRMATION MODAL */}
+      {deleteConfirm && deleteConfirm.isOpen && (
+        <div id="modal-confirmacao-admin" className="fixed inset-0 z-[9999] flex items-center justify-center bg-stone-900/60 backdrop-blur-xs animate-fade-in p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-[0_24px_60px_-15px_rgba(0,0,0,0.30)] border border-gray-150 space-y-5">
+            <div className="flex items-start gap-4">
+              <div className="h-10 w-10 rounded-full bg-red-50 flex items-center justify-center text-red-650 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="text-left space-y-1.5 font-sans">
+                <h3 className="text-sm font-extrabold text-[#0f1b29] uppercase tracking-wide">
+                  {deleteConfirm.title}
+                </h3>
+                <p className="text-xs text-[#52647c] leading-relaxed">
+                  {deleteConfirm.message}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-[#475569] text-xs font-bold rounded-xl transition-all duration-150 cursor-pointer border-0"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={deleteConfirm.onConfirm}
+                className="px-5 py-2 bg-[#af101a] hover:bg-[#930010] text-white text-xs font-bold rounded-xl transition-all duration-150 cursor-pointer border-0"
+              >
+                Sim, Excluir
               </button>
             </div>
           </div>

@@ -314,6 +314,10 @@ CREATE TABLE IF NOT EXISTS perfis (
 ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS cpf TEXT;
 ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS unidade TEXT;
 ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS perfil TEXT;
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS sobrenome TEXT;
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS apelido TEXT;
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS foto_perfil TEXT;
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS whatsapp TEXT;
 
 -- 5b. Tabela 'perfil' (Singular) - Conforme solicitado para compatibilidade direta e trigger dedicada
 CREATE TABLE IF NOT EXISTS perfil (
@@ -333,6 +337,11 @@ ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS cpf TEXT;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS tipo TEXT;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS unidade TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS sobrenome TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS apelido TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS foto_perfil TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS telefone TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS whatsapp TEXT;
 
 -- 6. Tabela de Condomínios
 CREATE TABLE IF NOT EXISTS condominios (
@@ -361,12 +370,46 @@ CREATE TABLE IF NOT EXISTS moradores (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL,
   cpf TEXT,
+  email TEXT,
   unidade TEXT,
   condominio_id TEXT,
   proprietario BOOLEAN DEFAULT true,
   telefone TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Garante que todas as colunas existem na tabela 'moradores' caso ela já existisse sem alguma delas
+ALTER TABLE public.moradores ADD COLUMN IF NOT EXISTS cpf TEXT;
+ALTER TABLE public.moradores ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.moradores ADD COLUMN IF NOT EXISTS unidade TEXT;
+ALTER TABLE public.moradores ADD COLUMN IF NOT EXISTS condominio_id TEXT;
+ALTER TABLE public.moradores ADD COLUMN IF NOT EXISTS proprietario BOOLEAN DEFAULT true;
+ALTER TABLE public.moradores ADD COLUMN IF NOT EXISTS telefone TEXT;
+
+-- 7b. Tabela de Síndicos (Cadastrados/Vinculados aos condomínios)
+CREATE TABLE IF NOT EXISTS sindico (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  sobrenome TEXT,
+  apelido TEXT,
+  cpf TEXT,
+  foto_url TEXT,
+  telefone TEXT,
+  whatsapp TEXT,
+  condominio_id TEXT,
+  email TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Garante que todas as colunas existem na tabela 'sindico' caso ela já existisse sem alguma delas
+ALTER TABLE public.sindico ADD COLUMN IF NOT EXISTS sobrenome TEXT;
+ALTER TABLE public.sindico ADD COLUMN IF NOT EXISTS apelido TEXT;
+ALTER TABLE public.sindico ADD COLUMN IF NOT EXISTS cpf TEXT;
+ALTER TABLE public.sindico ADD COLUMN IF NOT EXISTS foto_url TEXT;
+ALTER TABLE public.sindico ADD COLUMN IF NOT EXISTS telefone TEXT;
+ALTER TABLE public.sindico ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE public.sindico ADD COLUMN IF NOT EXISTS condominio_id TEXT;
+ALTER TABLE public.sindico ADD COLUMN IF NOT EXISTS email TEXT;
 
 -- 8. Tabela de Visitantes
 CREATE TABLE IF NOT EXISTS visitantes (
@@ -471,19 +514,238 @@ ALTER TABLE assemblies ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir tudo para simulação de assemblies" ON assemblies FOR ALL USING (true);
 
 ALTER TABLE perfis ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Permitir leitura de perfis" ON perfis FOR SELECT USING (true);
-CREATE POLICY "Permitir inserções públicas de perfis" ON perfis FOR INSERT WITH CHECK (true);
-CREATE POLICY "Permitir atualização do próprio perfil" ON perfis FOR UPDATE USING (auth.uid() = auth_user_id);
+ALTER TABLE perfil ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sindico ENABLE ROW LEVEL SECURITY;
+
+-- =========================================================================
+-- 13. FUNÇÕES DE APOIO PARA RLS (ROW LEVEL SECURITY) E VALIDAÇÃO DE CARGO
+-- =========================================================================
+CREATE OR REPLACE FUNCTION public.get_user_type(user_id uuid)
+RETURNS text AS $$
+DECLARE
+  v_tipo text;
+BEGIN
+  -- Tenta buscar o tipo de usuário na tabela perfil
+  SELECT tipo INTO v_tipo FROM public.perfil WHERE id = user_id;
+  RETURN COALESCE(v_tipo, 'morador');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.is_admin(user_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  RETURN public.get_user_type(user_id) IN ('administrador', 'admin');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.is_colaborador(user_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  RETURN public.get_user_type(user_id) = 'colaborador';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.is_sindico(user_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  RETURN public.get_user_type(user_id) = 'sindico';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.is_morador(user_id uuid)
+RETURNS boolean AS $$
+BEGIN
+  RETURN public.get_user_type(user_id) IN ('morador', 'proprietario');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.is_user_active(user_id uuid)
+RETURNS boolean AS $$
+DECLARE
+  v_ativo boolean;
+BEGIN
+  SELECT COALESCE(ativo, true) INTO v_ativo FROM public.perfis WHERE id = user_id;
+  RETURN COALESCE(v_ativo, true);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ==========================================================================
+-- 14. VIEW 'profiles' UNIFICANDO USUÁRIOS AUTH COM MORADORES, SÍNDICOS E ADMINS
+-- ==========================================================================
+CREATE OR REPLACE VIEW public.profiles AS
+SELECT 
+  u.id AS id,
+  u.email AS email,
+  COALESCE(p.nome, u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'nome', 'Usuário Novo') AS nome,
+  COALESCE(p.cpf, u.raw_user_meta_data->>'cpf') AS cpf,
+  COALESCE(p.tipo, 
+    LOWER(REPLACE(REPLACE(REPLACE(u.raw_user_meta_data->>'profile', 'síndico', 'sindico'), 'subsíndico', 'subsindico'), 'proprietário', 'proprietario')),
+    'morador'
+  ) AS tipo,
+  COALESCE(p.unidade, m.unidade, u.raw_user_meta_data->>'unidade', u.raw_user_meta_data->>'unit', 'Apto Geral') AS unidade,
+  COALESCE(p.condominio_id, m.condominio_id, s.condominio_id) AS condominio_id,
+  COALESCE(p.ativo, true) AS ativo
+FROM 
+  auth.users u
+LEFT JOIN 
+  public.perfil p ON u.id = p.id
+LEFT JOIN 
+  public.moradores m ON u.id::text = m.id::text
+LEFT JOIN 
+  public.sindico s ON u.id::text = s.id::text;
+
+-- GRANT de leitura pública para a view de profiles para as conexões authenticated/anon
+GRANT SELECT ON public.profiles TO authenticated, anon;
+
+-- ==========================================================================
+-- 15. DIRETIVAS DE RLS (ROW LEVEL SECURITY) BASEADAS NOS CARGOS E FUNÇÕES
+-- ==========================================================================
+
+-- A. Políticas para a Tabela 'perfis'
+DROP POLICY IF EXISTS "Permitir leitura de perfis" ON perfis;
+DROP POLICY IF EXISTS "Permitir inserções públicas de perfis" ON perfis;
+DROP POLICY IF EXISTS "Permitir atualização do próprio perfil" ON perfis;
+DROP POLICY IF EXISTS "Permitir tudo para simulação de perfis" ON perfis;
+
+CREATE POLICY "Controle Geral para Admins em perfis" ON perfis 
+  FOR ALL TO authenticated 
+  USING (public.is_admin(auth.uid())) 
+  WITH CHECK (public.is_admin(auth.uid()));
+
+CREATE POLICY "Leitura total de perfis por Colaboradores e Síndicos" ON perfis 
+  FOR SELECT TO authenticated 
+  USING (public.is_colaborador(auth.uid()) OR public.is_sindico(auth.uid()));
+
+CREATE POLICY "Leitura e Escrita do próprio registro em perfis" ON perfis 
+  FOR ALL TO authenticated 
+  USING (auth.uid() = auth_user_id) 
+  WITH CHECK (auth.uid() = auth_user_id);
+
+CREATE POLICY "Inserção pública para sincronismo de perfis" ON perfis
+  FOR INSERT WITH CHECK (true);
+
 CREATE POLICY "Permitir tudo para simulação de perfis" ON perfis FOR ALL USING (true);
 
--- Políticas de RLS para a tabela 'perfil' (singular)
-ALTER TABLE perfil ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Permitir leitura de perfil singular" ON perfil FOR SELECT USING (true);
-CREATE POLICY "Permitir inserções públicas de perfil singular" ON perfil FOR INSERT WITH CHECK (true);
-CREATE POLICY "Permitir atualização do próprio perfil singular" ON perfil FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Permitir tudo para simulação de perfil singular" ON perfil FOR ALL USING (true);
 
--- 6. Trigger automático de Sincronização de Cadastro pós-Auth (Grava em perfis e perfil)
+-- B. Políticas de RLS para a tabela 'perfil' (singular)
+DROP POLICY IF EXISTS "Permitir leitura de perfil singular" ON perfil;
+DROP POLICY IF EXISTS "Permitir inserções públicas de perfil singular" ON perfil;
+DROP POLICY IF EXISTS "Permitir atualização do próprio perfil singular" ON perfil;
+DROP POLICY IF EXISTS "Permitir tudo para simulação de perfil singular" ON perfil;
+
+CREATE POLICY "Acesso completo de Admin e Colab no perfil singular" ON perfil 
+  FOR ALL TO authenticated 
+  USING (public.is_admin(auth.uid()) OR public.is_colaborador(auth.uid())) 
+  WITH CHECK (public.is_admin(auth.uid()) OR public.is_colaborador(auth.uid()));
+
+CREATE POLICY "Leitura e Escrita do próprio perfil singular" ON perfil 
+  FOR ALL TO authenticated 
+  USING (auth.uid() = id) 
+  WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Garantir inserção de perfil no cadastro" ON perfil
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Permitir tudo para simulação de perfil" ON perfil FOR ALL USING (true);
+
+
+-- C. Políticas de Proteção para a Tabela 'condominios'
+DROP POLICY IF EXISTS "Permitir tudo para simulação de condominios" ON condominios;
+
+CREATE POLICY "Acesso irrestrito a Condomínios para Admin e Colaborador" ON condominios
+  FOR ALL TO authenticated
+  USING (public.is_admin(auth.uid()) OR public.is_colaborador(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()) OR public.is_colaborador(auth.uid()));
+
+CREATE POLICY "Síndicos leem e alteram apenas seu condomínio" ON condominios
+  FOR ALL TO authenticated
+  USING (
+    public.is_sindico(auth.uid()) AND (
+      id = (SELECT condominio_id FROM public.perfil WHERE id = auth.uid()) OR
+      sindico = (SELECT nome FROM public.perfil WHERE id = auth.uid())
+    )
+  )
+  WITH CHECK (
+    public.is_sindico(auth.uid()) AND (
+      id = (SELECT condominio_id FROM public.perfil WHERE id = auth.uid()) OR
+      sindico = (SELECT nome FROM public.perfil WHERE id = auth.uid())
+    )
+  );
+
+CREATE POLICY "Moradores visualizam seu próprio condomínio vinculado" ON condominios
+  FOR SELECT TO authenticated
+  USING (
+    public.is_morador(auth.uid()) AND 
+    id = (SELECT condominio_id FROM public.perfil WHERE id = auth.uid())
+  );
+
+CREATE POLICY "Backup de simulação irrestrita para condominios de teste" ON condominios FOR ALL USING (true);
+
+
+-- D. Políticas de RLS para a Tabela 'moradores'
+DROP POLICY IF EXISTS "Permitir tudo para simulação de moradores" ON moradores;
+
+CREATE POLICY "Cadastro e controle de moradores para Admin e Colab" ON moradores
+  FOR ALL TO authenticated
+  USING (public.is_admin(auth.uid()) OR public.is_colaborador(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()) OR public.is_colaborador(auth.uid()));
+
+CREATE POLICY "Síndicos gerenciam moradores de seu condomínio" ON moradores
+  FOR ALL TO authenticated
+  USING (
+    public.is_sindico(auth.uid()) AND 
+    condominio_id = (SELECT condominio_id FROM public.perfil WHERE id = auth.uid())
+  )
+  WITH CHECK (
+    public.is_sindico(auth.uid()) AND 
+    condominio_id = (SELECT condominio_id FROM public.perfil WHERE id = auth.uid())
+  );
+
+CREATE POLICY "Morador pode ver lista de vizinhos do seu condomínio" ON moradores
+  FOR SELECT TO authenticated
+  USING (
+    condominio_id = (SELECT condominio_id FROM public.perfil WHERE id = auth.uid())
+  );
+
+CREATE POLICY "Permitir tudo para simulação de moradores" ON moradores FOR ALL USING (true);
+
+
+-- E. Políticas de RLS para a Tabela 'sindico'
+DROP POLICY IF EXISTS "Permitir tudo para simulação de sindico" ON sindico;
+
+CREATE POLICY "Controle total de Síndicos para Admins e Colaboradores" ON sindico
+  FOR ALL TO authenticated
+  USING (public.is_admin(auth.uid()) OR public.is_colaborador(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()) OR public.is_colaborador(auth.uid()));
+
+CREATE POLICY "Síndicos gerenciam dados da sua própria conta" ON sindico
+  FOR ALL TO authenticated
+  USING (
+    public.is_sindico(auth.uid()) AND (
+      id = auth.uid()::text OR
+      email = (SELECT email FROM public.perfil WHERE id = auth.uid()) OR
+      cpf = (SELECT cpf FROM public.perfil WHERE id = auth.uid())
+    )
+  )
+  WITH CHECK (
+    public.is_sindico(auth.uid()) AND (
+      id = auth.uid()::text OR
+      email = (SELECT email FROM public.perfil WHERE id = auth.uid()) OR
+      cpf = (SELECT cpf FROM public.perfil WHERE id = auth.uid())
+    )
+  );
+
+CREATE POLICY "Todos podem ler o síndico de seu condomínio" ON sindico
+  FOR SELECT TO authenticated
+  USING (
+    condominio_id = (SELECT condominio_id FROM public.perfil WHERE id = auth.uid()) OR
+    condominio_id IS NULL
+  );
+
+CREATE POLICY "Permitir tudo para simulação de sindico" ON sindico FOR ALL USING (true);
+
+
+-- 16. Trigger automático de Sincronização de Cadastro pós-Auth (Grava em perfis e perfil)
 -- Execute este bloco para garantir que, caso o e-mail exija confirmação,
 -- o perfil correspondente seja injetado direto no banco pelo servidor Postgres.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -524,4 +786,5 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
 `;

@@ -2609,9 +2609,11 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                         currentFilteredCondos.map(item => (
                           <div 
                             key={item.id} 
-                            className="bg-white p-6 rounded-3xl border border-gray-200 shadow-xs flex flex-col justify-between text-left h-full group transition-all duration-200"
+                            onClick={() => setDetailedCondo(item)}
+                            className="bg-white p-6 rounded-3xl border border-gray-200 hover:border-[#af101a]/40 shadow-xs hover:shadow-md hover:bg-stone-50/45 cursor-pointer flex flex-col text-left h-full group transition-all duration-200 active:scale-[0.99]"
+                            title="Clique de forma interativa para ver os detalhes completos deste condomínio"
                           >
-                            <div className="space-y-3 flex-1">
+                            <div className="space-y-3">
                               <h5 className="font-sans font-bold text-[#101c29] text-lg leading-snug group-hover:text-primary transition-colors">
                                 {item.nome}
                               </h5>
@@ -2619,17 +2621,6 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                                 <span className="text-gray-400 select-none shrink-0" aria-hidden="true">📍</span>
                                 <span>{item.endereco}, {item.bairro}</span>
                               </p>
-                            </div>
-
-                            <div className="pt-5 mt-4 border-t border-gray-100 flex justify-end">
-                              <button
-                                onClick={() => setDetailedCondo(item)}
-                                className="w-full bg-[#af101a] hover:bg-[#930010] active:scale-[0.98] text-white px-5 py-3 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#af101a]/10 border-0"
-                                title="Ver os detalhes completos"
-                              >
-                                <span>Acessar Detalhes</span>
-                                <ArrowRight className="w-4 h-4" />
-                              </button>
                             </div>
                           </div>
                         ))

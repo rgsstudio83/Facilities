@@ -849,3 +849,54 @@ CREATE POLICY "Usuarios leem fotos das ocorrencias vinculadas"
     ON storage.objects FOR SELECT
     TO authenticated
     USING (bucket_id = 'fotos-chamados');
+
+-- =========================================================================
+-- CAMPANHA DE ATUALIZAÇÃO DO ESQUEMA - ADICIONANDO COLUNAS DO SÍNDICO
+-- =========================================================================
+
+-- Adiciona colunas necessárias na tabela 'perfis' (plural) se não existirem
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS sobrenome TEXT;
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS apelido TEXT;
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS foto_perfil TEXT;
+ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+
+-- Adiciona colunas necessárias na tabela 'perfil' (singular) se não existirem
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS sobrenome TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS apelido TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS foto_perfil TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS telefone TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+
+-- =========================================================================
+-- TABELA DOS SÍNDICOS CADASTRADOS (Tabela Autônoma 'sindico')
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.sindico (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nome TEXT NOT NULL,
+    sobrenome TEXT,
+    apelido TEXT,
+    cpf TEXT,
+    foto_url TEXT,
+    telefone TEXT,
+    whatsapp TEXT,
+    condominio_id UUID REFERENCES public.condominios(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Habilitar RLS para segurança no Supabase
+ALTER TABLE public.sindico ENABLE ROW LEVEL SECURITY;
+
+-- Políticas de Acesso para public.sindico
+CREATE POLICY "Permitir leitura pública de síndicos"
+    ON public.sindico FOR SELECT
+    TO public
+    USING (true);
+
+CREATE POLICY "Permitir inserção e atualização de síndicos por admin ou autenticados"
+    ON public.sindico FOR ALL
+    TO authenticated
+    USING (true)
+    WITH CHECK (true);
+
+

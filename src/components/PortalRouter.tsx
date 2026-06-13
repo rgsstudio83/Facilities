@@ -12,6 +12,9 @@ export interface UserProfile {
   tipo: string;
   cpf?: string;
   unidade?: string;
+  ativo?: boolean;
+  perfil?: string;
+  condominio_id?: string;
 }
 
 interface PortalRouterContextType {
@@ -101,7 +104,10 @@ function mapDbProfileToInterface(dbData: any): UserProfile {
     email: dbData.email || '',
     tipo: mappedTipo,
     cpf: dbData.cpf || '',
-    unidade: dbData.unidade || ''
+    unidade: dbData.unidade || '',
+    ativo: dbData.ativo !== false,
+    perfil: dbData.perfil || dbData.tipo || 'Morador',
+    condominio_id: dbData.condominio_id || 'cd-1'
   };
 }
 
@@ -141,7 +147,9 @@ export async function ensureAndGetProfile(authUser: any): Promise<UserProfile | 
       unidade: unit,
       tipo: normalizedRole,
       perfil: rawRole,
-      cpf: cpf
+      cpf: cpf,
+      ativo: true,
+      condominio_id: 'cd-1'
     };
 
     console.log('[ensureAndGetProfile] Criando/Sincronizando perfil pós-autenticação para o usuário:', authUser.id, insertPayload);
@@ -449,6 +457,10 @@ export function PortalRouterProvider({
     });
 
     if (found) {
+      if (found.ativo === false) {
+        throw new Error('Conta Inativa. Seu usuário foi desativado pelo administrador.');
+      }
+
       const simUser = {
         id: found.cpf,
         auth_user_id: found.cpf,
@@ -460,7 +472,10 @@ export function PortalRouterProvider({
           .replace('proprietário', 'proprietario')
           .trim(),
         cpf: found.cpf,
-        unidade: found.unit
+        unidade: found.unit,
+        ativo: found.ativo !== false,
+        perfil: found.profile,
+        condominio_id: found.condominio_id || 'cd-1'
       };
       
       localStorage.setItem('facilities_simulated_session', JSON.stringify(simUser));
@@ -569,6 +584,13 @@ export function PortalRouterProvider({
       if (data?.user) {
         const userProf = await ensureAndGetProfile(data.user);
         if (userProf) {
+          if (userProf.ativo === false) {
+            await supabase.auth.signOut();
+            setProfile(null);
+            setProfileError('Sua conta de usuário está inativa. Entre em contato com o suporte/administração.');
+            triggerNotification('Conta Inativa', 'Este acesso está temporariamente desativado.');
+            throw new Error('Conta Inativa. Seu usuário foi desativado pelo administrador.');
+          }
           setProfile(userProf);
           setProfileError(null);
           const userRole = userProf.tipo;
@@ -998,7 +1020,44 @@ export function PortalRouteGuard({
   }
 
   const path = currentRoute.replace('#', '');
-  const isDashboardRoute = path.startsWith('dashboard/');
+  const isDashboardRoute = path.startsWith('dashboard');
+
+  if (isDashboardRoute && isLoggedIn && profile) {
+    const segments = path.split('/');
+    const expectedRole = segments[1]; // admin, colaborador, sindico, morador, etc.
+    const userRole = profile.tipo;
+
+    const normalizedUser = userRole === 'administrador' ? 'admin' : userRole;
+    const normalizedExpected = expectedRole === 'administrador' ? 'admin' : expectedRole;
+
+    if (normalizedExpected && normalizedUser !== normalizedExpected) {
+      return (
+        <div className="min-h-screen bg-[#070b12] flex items-center justify-center p-6 text-center select-none font-sans">
+          <div className="bg-[#101c29] border border-red-500/30 rounded-3xl p-8 max-w-md w-full shadow-2xl relative overflow-hidden flex flex-col items-center">
+            <div className="absolute top-0 inset-x-0 h-1 bg-red-600"></div>
+            <div className="bg-red-500/10 p-4 rounded-xl text-red-500 border border-red-500/20 mb-4 mt-2">
+              <ShieldAlert className="w-10 h-10 animate-bounce" />
+            </div>
+            <h4 className="font-display font-extrabold text-white text-lg tracking-wider">Acesso Não Autorizado</h4>
+            <p className="text-sm text-red-400 font-bold mt-3 leading-relaxed">
+              Acesso não autorizado.
+            </p>
+            <p className="text-xs text-gray-400 mt-2">
+              Sua conta com perfil <span className="uppercase font-extrabold text-primary">{userRole}</span> não possui autorização para ingressar na área restrita de <span className="uppercase font-extrabold text-gray-200">{expectedRole}</span>.
+            </p>
+            <button
+              onClick={() => {
+                window.location.hash = `#dashboard/${normalizedUser}`;
+              }}
+              className="mt-6 w-full bg-red-650 hover:bg-red-700 hover:scale-[1.02] text-white py-2.5 rounded-xl cursor-pointer transition-all duration-200 text-xs font-bold border-0"
+            >
+              Retornar ao Meu Painel Seguro
+            </button>
+          </div>
+        </div>
+      );
+    }
+  }
 
   if (isDashboardRoute && (!isLoggedIn || !profile)) {
     return (
