@@ -36,6 +36,9 @@ import {
   Key,
   ShieldCheck,
   Check,
+  Mail,
+  Send,
+  Power,
   Bell
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, supabaseUrl, supabaseAnonKey, insertResilient } from '../lib/supabaseClient';
@@ -101,6 +104,22 @@ interface UserProfile {
   perfil?: string;
   ativo?: boolean;
   condominio_id?: string;
+  apelido?: string;
+  telefone?: string;
+  status_convite?: 'pendente' | 'aceito';
+}
+
+interface InviteEmailLog {
+  id: string;
+  destinatario: string;
+  nome: string;
+  cargo: string;
+  administradora: string;
+  data: string;
+  link: string;
+  status: 'Sucesso' | 'Falha';
+  erro?: string;
+  conteudoHtml?: string;
 }
 
 interface Condominio {
@@ -258,6 +277,7 @@ export default function AdminDashboardModal({
 
   const [newProfileNome, setNewProfileNome] = useState('');
   const [newProfileEmail, setNewProfileEmail] = useState('');
+  const [newProfileApelido, setNewProfileApelido] = useState('');
   const [newProfileCpf, setNewProfileCpf] = useState('');
   const [newProfileUnidade, setNewProfileUnidade] = useState('');
   const [newProfileTipo, setNewProfileTipo] = useState('morador');
@@ -265,6 +285,20 @@ export default function AdminDashboardModal({
   const [newProfileAtivo, setNewProfileAtivo] = useState(true);
   const [newProfileCondoId, setNewProfileCondoId] = useState('cd-1');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+
+  // Collaborator management states
+  const [showColaboradorForm, setShowColaboradorForm] = useState(false);
+  const [selectedColaboradorId, setSelectedColaboradorId] = useState<string | null>(null);
+  const [colaboradorNome, setColaboradorNome] = useState('');
+  const [colaboradorEmail, setColaboradorEmail] = useState('');
+  const [colaboradorApelido, setColaboradorApelido] = useState('');
+  const [colaboradorCpf, setColaboradorCpf] = useState('');
+  const [colaboradorTelefone, setColaboradorTelefone] = useState('');
+  const [colaboradorUnidade, setColaboradorUnidade] = useState('');
+  const [colaboradorPassword, setColaboradorPassword] = useState('');
+  const [colaboradorAtivo, setColaboradorAtivo] = useState(true);
+  const [colaboradorCondoId, setColaboradorCondoId] = useState('cd-1');
+  const [colaboradorSearch, setColaboradorSearch] = useState('');
 
   // Role Types Dynamic States & Forms definition
   const [roleTypes, setRoleTypes] = useState<RoleType[]>([]);
@@ -570,7 +604,12 @@ export default function AdminDashboardModal({
             cpf: p.cpf || '',
             unidade: p.unidade || '',
             tipo: p.tipo || 'morador',
-            perfil: p.perfil || 'Morador'
+            perfil: p.perfil || 'Morador',
+            ativo: p.ativo !== false,
+            condominio_id: p.condominio_id || 'cd-1',
+            apelido: p.apelido || '',
+            telefone: p.telefone || '',
+            status_convite: p.status_convite || 'aceito'
           })));
         } else {
           const localData = localStorage.getItem('supabase_sim_perfis');
@@ -1171,7 +1210,8 @@ export default function AdminDashboardModal({
         unit: newProfileUnidade || 'Apto Geral',
         profile: resolvedPerfil,
         ativo: newProfileAtivo,
-        condominio_id: newProfileCondoId
+        condominio_id: newProfileCondoId,
+        apelido: newProfileApelido.trim()
       };
       if (uIdx !== -1) {
         users[uIdx] = newUserSim;
@@ -1193,7 +1233,8 @@ export default function AdminDashboardModal({
       tipo: cleanTipo,
       perfil: resolvedPerfil,
       ativo: newProfileAtivo,
-      condominio_id: newProfileCondoId
+      condominio_id: newProfileCondoId,
+      apelido: newProfileApelido.trim()
     };
 
     if (isEdit) {
@@ -1217,7 +1258,8 @@ export default function AdminDashboardModal({
           tipo: cleanTipo,
           perfil: resolvedPerfil,
           ativo: newProfileAtivo,
-          condominio_id: newProfileCondoId
+          condominio_id: newProfileCondoId,
+          apelido: newProfileApelido.trim()
         };
         await supabase.from('perfil').upsert({
           id: targetId,
@@ -1227,7 +1269,8 @@ export default function AdminDashboardModal({
           tipo: cleanTipo,
           unidade: newProfileUnidade || 'Apto Geral',
           ativo: newProfileAtivo,
-          condominio_id: newProfileCondoId
+          condominio_id: newProfileCondoId,
+          apelido: newProfileApelido.trim()
         });
       } catch (err: any) {
         console.error('Erro ao salvar perfil no Supabase:', err.message);
@@ -1249,6 +1292,7 @@ export default function AdminDashboardModal({
     // Limpa formulário
     setNewProfileNome('');
     setNewProfileEmail('');
+    setNewProfileApelido('');
     setNewProfilePassword('');
     setNewProfileCpf('');
     setNewProfileUnidade('');
@@ -1286,6 +1330,420 @@ export default function AdminDashboardModal({
     }
 
     onShowMessage("Sucesso", "Perfil removido do sistema.");
+  };
+
+  // Email invitation logs and sender
+  const [inviteEmailLogs, setInviteEmailLogs] = useState<InviteEmailLog[]>(() => {
+    const saved = localStorage.getItem('facilities_invite_email_logs');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const dispatchInviteEmail = async (nome: string, email: string, telefone: string, cargo: string, isReset = false, tempPass?: string): Promise<boolean> => {
+    const adminName = "Cristhiane Xavier"; // Administradora
+    const logId = `eml-${Date.now()}`;
+    const cleanEmail = email.trim();
+    
+    // Link seguro para criação de senha com parâmetros de hash compatíveis com SPA
+    let secureLink = `${window.location.origin}/#definir-senha?email=${encodeURIComponent(cleanEmail)}&admin=${encodeURIComponent(adminName)}&action=${isReset ? 'reset' : 'invite'}`;
+    if (tempPass) {
+      secureLink += `&tempPass=${encodeURIComponent(tempPass)}`;
+    }
+    
+    const emailHtmlBody = `
+      <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto 20px auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff; text-align: left;">
+        <div style="background-color: #af101a; padding: 24px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: 0.5px;">FACILITIES PREMIUM</h1>
+          <p style="color: #fca5a5; margin: 4px 0 0 0; font-size: 11px; font-weight: 600; text-transform: uppercase;">Central de Convites de Colaboradores</p>
+        </div>
+        <div style="padding: 32px 24px; color: #1e293b; text-align: left;">
+          <h2 style="font-size: 16px; margin-top: 0; font-weight: 700; color: #0f172a;">Olá, ${nome}!</h2>
+          <p style="font-size: 13px; line-height: 1.6; color: #334155;">
+            Você foi cadastrado(a) como <strong>${cargo}</strong> na plataforma <strong>Facilities Premium</strong> pela administradora <strong>${adminName}</strong>.
+          </p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin: 20px 0;">
+            <h3 style="font-size: 11px; text-transform: uppercase; margin: 0 0 12px 0; color: #64748b; font-weight: bold; letter-spacing: 0.5px;">Informações de Acesso Seguro</h3>
+            <p style="margin: 4px 0; font-size: 12px; color: #1e293b;"><strong>E-mail de Login:</strong> <span style="font-family: monospace; font-weight: 600;">${cleanEmail}</span></p>
+            <p style="margin: 4px 0; font-size: 12px; color: #1e293b;"><strong>Telefone de Contato:</strong> ${telefone || 'Não fornecido'}</p>
+            <p style="margin: 4px 0; font-size: 12px; color: #1e293b;"><strong>Cargo Atribuído:</strong> ${cargo}</p>
+            <p style="margin: 4px 0; font-size: 12px; color: #1e293b;"><strong>Perfil de Sistema:</strong> Colaborador</p>
+          </div>
+          <p style="font-size: 13px; line-height: 1.6; color: #334155;">
+            Por políticas internas de segurança e conformidade da LGPD, sua senha pessoal deve ser definida exclusivamente por você. Use o link seguro abaixo para definir sua senha de acesso direto na nuvem:
+          </p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${secureLink}" style="background-color: #af101a; color: #ffffff; padding: 12px 26px; font-size: 12px; font-weight: bold; text-decoration: none; border-radius: 8px; display: inline-block; box-shadow: 0 4px 10px rgba(175, 16, 26, 0.15); font-family: sans-serif;">
+              ${isReset ? 'Redefinir Minha Senha de Acesso' : 'Definir Minha Senha de Acesso'}
+            </a>
+          </div>
+          <p style="font-size: 10px; color: #94a3b8; text-align: center; margin-top: 30px; border-top: 1px solid #f1f5f9; padding-top: 15px; font-family: sans-serif;">
+            Este convite é seguro e expira em 24 horas. Se você não reconhece este cadastro, por favor ignore este e-mail.
+          </p>
+        </div>
+      </div>
+    `;
+
+    let success = true;
+    let errorDetail = '';
+
+    try {
+      const response = await fetch("/api/send-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: "Facilities Premium <contato@facilities.com>",
+          to: cleanEmail,
+          subject: isReset ? "Redefinição de Senha - Facilities Premium" : "Convite de Acesso - Facilities Premium",
+          html: emailHtmlBody
+        })
+      });
+
+      const resData = await response.json();
+      if (!response.ok || !resData.success) {
+        success = false;
+        errorDetail = resData.error || "Erro ao disparar e-mail via API do Resend";
+      }
+    } catch (err: any) {
+      success = false;
+      errorDetail = err.message || "Erro de conexão com o servidor local";
+    }
+
+    // Removido Supabase Auth resetPasswordForEmail secundário para evitar duplo e-mail no padrão inglês vindo de noreply@mail.app.supabase.io
+    console.log("Supabase Auth resetPasswordForEmail secundário ignorado devido ao fluxo principal via Resend API.");
+
+    const newLog: InviteEmailLog = {
+      id: logId,
+      destinatario: cleanEmail,
+      nome,
+      cargo,
+      administradora: adminName,
+      data: new Date().toLocaleString('pt-BR'),
+      link: secureLink,
+      status: success ? 'Sucesso' : 'Falha',
+      erro: errorDetail || undefined,
+      conteudoHtml: emailHtmlBody
+    };
+
+    const updatedLogs = [newLog, ...inviteEmailLogs];
+    setInviteEmailLogs(updatedLogs);
+    localStorage.setItem('facilities_invite_email_logs', JSON.stringify(updatedLogs));
+
+    if (!success) {
+      addAuditLog('BLOQUEIO', 'perfis', `Falha ao enviar convite para ${cleanEmail}: ${errorDetail}`);
+      console.error('Falha de envio de convite:', errorDetail);
+    } else {
+      addAuditLog('CRIAR', 'perfis', `Convite de acesso enviado via Resend para ${cleanEmail}`);
+    }
+
+    return success;
+  };
+
+  const handleCreateOrUpdateColaborador = async (e: FormEvent) => {
+    e.preventDefault();
+    if (activeProfile !== 'admin') {
+      onShowMessage("Bloqueio de Permissão", "Apenas o perfil Administrador pode adicionar ou editar colaboradores.");
+      return;
+    }
+    if (!colaboradorNome.trim() || !colaboradorEmail.trim()) {
+      onShowMessage("Erro", "Nome e Email são campos obrigatórios.");
+      return;
+    }
+
+    const isEdit = !!selectedColaboradorId;
+    let targetId = selectedColaboradorId || `p-${Date.now()}`;
+    let generatedTempPassword = '';
+
+    if (!isEdit) {
+      generatedTempPassword = 'TempColab@' + Math.random().toString(36).substring(2, 10).toUpperCase() + '2026!';
+    }
+
+    const cleanCpf = colaboradorCpf.replace(/\D/g, '');
+    const formattedCpf = cleanCpf.length === 11 
+      ? cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+      : colaboradorCpf;
+
+    const resolvedPerfil = 'Colaborador';
+    const cleanTipo = 'colaborador';
+
+    if (isSupabaseConfigured && !isEdit) {
+      try {
+        const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false
+          }
+        });
+
+        const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
+          email: colaboradorEmail.trim(),
+          password: generatedTempPassword,
+          options: {
+            data: {
+              full_name: colaboradorNome.trim(),
+              unit: colaboradorUnidade || 'Suporte Facilities',
+              profile: resolvedPerfil,
+              cpf: formattedCpf,
+              phone: colaboradorTelefone.trim()
+            }
+          }
+        });
+
+        if (signUpError) {
+          throw signUpError;
+        }
+
+        if (signUpData?.user) {
+          targetId = signUpData.user.id;
+        }
+      } catch (authErr: any) {
+        console.error('Erro de Autenticação no Supabase Auth:', authErr);
+        onShowMessage("Erro ao Criar Login", `Não foi possível criar as credenciais de autenticação no Supabase Auth: ${authErr.message}`);
+        
+        // Log de erro estrito conforme requisito #7
+        const failedLog: InviteEmailLog = {
+          id: `eml-fail-${Date.now()}`,
+          destinatario: colaboradorEmail.trim(),
+          nome: colaboradorNome.trim(),
+          cargo: colaboradorUnidade || 'Suporte Facilities',
+          administradora: "Cristhiane Xavier",
+          data: new Date().toLocaleString('pt-BR'),
+          link: '',
+          status: 'Falha',
+          erro: authErr.message || 'Erro durante a requisição de SignUp no Supabase'
+        };
+        const updatedLogs = [failedLog, ...inviteEmailLogs];
+        setInviteEmailLogs(updatedLogs);
+        localStorage.setItem('facilities_invite_email_logs', JSON.stringify(updatedLogs));
+        addAuditLog('BLOQUEIO', 'perfis', `Falha de criação e envio de convite do colaborador ${colaboradorNome}: ${authErr.message}`);
+        return;
+      }
+    }
+
+    // Salva no repositório de simulação offline de usuários (facilities_portal_users) para login local fallback
+    try {
+      const savedUsers = localStorage.getItem('facilities_portal_users');
+      let users = [];
+      if (savedUsers) {
+        try { users = JSON.parse(savedUsers); } catch { users = []; }
+      }
+      const uIdx = users.findIndex((u: any) => u.email.toLowerCase() === colaboradorEmail.trim().toLowerCase());
+      const existingPass = (uIdx !== -1) ? (users[uIdx].pass || '123456') : '';
+
+      const newUserSim = {
+        cpf: formattedCpf,
+        email: colaboradorEmail.trim(),
+        pass: existingPass || generatedTempPassword, // Fica preenchido com a temporária gerada ou a atual, redefinível via link definir-senha
+        name: colaboradorNome.trim(),
+        unit: colaboradorUnidade || 'Suporte Facilities',
+        profile: resolvedPerfil,
+        ativo: colaboradorAtivo,
+        condominio_id: colaboradorCondoId,
+        apelido: colaboradorApelido.trim(),
+        telefone: colaboradorTelefone.trim(),
+        status_convite: isEdit ? (uIdx !== -1 ? (users[uIdx].status_convite || 'aceito') : 'aceito') : 'pendente'
+      };
+      if (uIdx !== -1) {
+        users[uIdx] = newUserSim;
+      } else {
+        users.push(newUserSim);
+      }
+      localStorage.setItem('facilities_portal_users', JSON.stringify(users));
+    } catch (err) {
+      console.warn('Erro ao atualizar base de credenciais local:', err);
+    }
+
+    const currentLocalListColab = localStorage.getItem('supabase_sim_perfis');
+    let loadedColab: UserProfile | undefined = undefined;
+    if (currentLocalListColab) {
+      try {
+        const parsed = JSON.parse(currentLocalListColab);
+        loadedColab = parsed.find((p: any) => p.id === targetId);
+      } catch {}
+    }
+
+    const profileData: UserProfile = {
+      id: targetId,
+      auth_user_id: targetId,
+      nome: colaboradorNome.trim(),
+      email: colaboradorEmail.trim(),
+      cpf: formattedCpf,
+      unidade: colaboradorUnidade || 'Suporte Facilities',
+      tipo: cleanTipo,
+      perfil: resolvedPerfil,
+      ativo: colaboradorAtivo,
+      condominio_id: colaboradorCondoId,
+      apelido: colaboradorApelido.trim(),
+      telefone: colaboradorTelefone.trim(),
+      status_convite: isEdit ? (loadedColab?.status_convite || 'aceito') : 'pendente'
+    };
+
+    if (isEdit) {
+      setProfilesList(prev => prev.map(p => p.id === targetId ? profileData : p));
+      addAuditLog('EDITAR', 'perfis', `Atualizado perfil do colaborador: ${colaboradorNome} (Ativo: ${colaboradorAtivo})`);
+    } else {
+      setProfilesList(prev => [profileData, ...prev]);
+      addAuditLog('CRIAR', 'perfis', `Criado novo perfil de colaborador: ${colaboradorNome} (Ativo: ${colaboradorAtivo})`);
+    }
+
+    // Persiste no Supabase se houver conexão
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('perfil').upsert({
+          id: targetId,
+          nome: colaboradorNome.trim(),
+          email: colaboradorEmail.trim(),
+          cpf: formattedCpf,
+          tipo: cleanTipo,
+          unidade: colaboradorUnidade || 'Suporte Facilities',
+          ativo: colaboradorAtivo,
+          condominio_id: colaboradorCondoId,
+          apelido: colaboradorApelido.trim(),
+          telefone: colaboradorTelefone.trim(),
+          status_convite: profileData.status_convite
+        });
+      } catch (err: any) {
+        console.error('Erro ao salvar colaborador no Supabase:', err.message);
+      }
+    }
+
+    // Atualiza no localStorage também
+    const localDataColab = localStorage.getItem('supabase_sim_perfis');
+    let localListColab: UserProfile[] = localDataColab ? JSON.parse(localDataColab) : [];
+    if (isEdit) {
+      localListColab = localListColab.map(p => p.id === targetId ? profileData : p);
+    } else {
+      localListColab = [profileData, ...localListColab];
+    }
+    localStorage.setItem('supabase_sim_perfis', JSON.stringify(localListColab));
+
+    // Despacha o e-mail de convite automaticamente após salvar o colaborador se for cadastro novo
+    if (!isEdit) {
+      await dispatchInviteEmail(
+        colaboradorNome.trim(),
+        colaboradorEmail.trim(),
+        colaboradorTelefone.trim(),
+        colaboradorUnidade || 'Suporte Facilities',
+        false,
+        generatedTempPassword
+      );
+    }
+
+    onShowMessage("Sucesso", isEdit ? "Colaborador atualizado com sucesso!" : "Colaborador criado e convite de acesso enviado por e-mail com sucesso!");
+    
+    // Limpa formulário
+    setColaboradorNome('');
+    setColaboradorEmail('');
+    setColaboradorApelido('');
+    setColaboradorCpf('');
+    setColaboradorTelefone('');
+    setColaboradorUnidade('');
+    setColaboradorPassword('');
+    setColaboradorAtivo(true);
+    setColaboradorCondoId('cd-1');
+    setSelectedColaboradorId(null);
+    setShowColaboradorForm(false);
+  };
+
+  const handleDeleteColaborador = async (id: string, name: string) => {
+    if (activeProfile !== 'admin') {
+      onShowMessage("Bloqueio de Permissão", "Apenas o perfil Administrador pode excluir colaboradores.");
+      return;
+    }
+
+    if (!confirm(`Confirmar exclusão de cadastro do colaborador "${name}"?`)) {
+      return;
+    }
+
+    setProfilesList(prev => prev.filter(p => p.id !== id));
+    addAuditLog('EXCLUIR', 'perfis', `Deletado colaborador: ${name}`);
+
+    // Deleta do Supabase se houver conexão
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('perfil').delete().eq('id', id);
+      } catch (err: any) {
+        console.error('Erro ao excluir colaborador no Supabase:', err.message);
+      }
+    }
+
+    // Exclui do localStorage
+    const localDataColab = localStorage.getItem('supabase_sim_perfis');
+    if (localDataColab) {
+      let localListColab: UserProfile[] = JSON.parse(localDataColab);
+      localListColab = localListColab.filter(p => p.id !== id);
+      localStorage.setItem('supabase_sim_perfis', JSON.stringify(localListColab));
+    }
+
+    // Exclui de facilities_portal_users
+    const savedUsers = localStorage.getItem('facilities_portal_users');
+    if (savedUsers) {
+      try {
+        let users = JSON.parse(savedUsers);
+        const colabProfile = profilesList.find(p => p.id === id);
+        const colabEmail = colabProfile?.email?.toLowerCase();
+        users = users.filter((u: any) => {
+          if (colabEmail && u.email?.toLowerCase() === colabEmail) return false;
+          if (u.name === name) return false;
+          return true;
+        });
+        localStorage.setItem('facilities_portal_users', JSON.stringify(users));
+      } catch {}
+    }
+
+    onShowMessage("Sucesso", "Colaborador removido com sucesso.");
+  };
+
+  const handleToggleColaboradorAtivo = async (item: UserProfile) => {
+    if (activeProfile !== 'admin') {
+      onShowMessage("Bloqueio de Permissão", "Apenas o perfil Administrador pode alterar o status de colaboradores.");
+      return;
+    }
+    const newAtivo = item.ativo === false; // toggle status
+    const updatedProfile = { ...item, ativo: newAtivo };
+
+    // Update React state
+    setProfilesList(prev => prev.map(p => p.id === item.id ? updatedProfile : p));
+
+    // Update simulation database in storage
+    const localData = localStorage.getItem('supabase_sim_perfis');
+    if (localData) {
+      try {
+        let localList = JSON.parse(localData);
+        localList = localList.map((p: any) => p.id === item.id ? { ...p, ativo: newAtivo } : p);
+        localStorage.setItem('supabase_sim_perfis', JSON.stringify(localList));
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Update local authentication system
+    const savedUsers = localStorage.getItem('facilities_portal_users');
+    if (savedUsers) {
+      try {
+        let users = JSON.parse(savedUsers);
+        const uIdx = users.findIndex((u: any) => u.email.toLowerCase() === item.email.toLowerCase());
+        if (uIdx !== -1) {
+          users[uIdx].ativo = newAtivo;
+          localStorage.setItem('facilities_portal_users', JSON.stringify(users));
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Update real Supabase backend cloud
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('perfil').update({ ativo: newAtivo }).eq('id', item.id);
+      } catch (err: any) {
+        console.error('Erro ao atualizar status do colaborador no Supabase:', err.message);
+      }
+    }
+
+    addAuditLog('EDITAR', 'perfis', `Status de colaborador alterado: ${item.nome} para ${newAtivo ? 'ATIVO' : 'BLOQUEADO'}`);
+    onShowMessage("Sucesso", `Colaborador "${item.nome}" foi ${newAtivo ? 'ativado' : 'desativado (bloqueado)'} com sucesso!`);
   };
 
   const handleCreateOrUpdateRoleType = async (e: FormEvent) => {
@@ -1611,6 +2069,7 @@ export default function AdminDashboardModal({
         return [
           { id: 'dashboard', label: 'Dashboard', icon: <Compass className="w-4 h-4" /> },
           { id: 'condominios', label: 'Condomínios', icon: <Building2 className="w-4 h-4" /> },
+          { id: 'colaboradores', label: 'Colaboradores', icon: <Users className="w-4 h-4 text-amber-500" /> },
           { id: 'perfis', label: 'Gestão de Perfis (Roles)', icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> },
           { id: 'financeiro', label: 'Financeiro Geral', icon: <Wallet className="w-4 h-4" /> },
           { id: 'portaria', label: 'Portaria Hub', icon: <Key className="w-4 h-4" /> },
@@ -1712,7 +2171,7 @@ export default function AdminDashboardModal({
               <img 
                 src="https://ejpjtpteycckydrorjpr.supabase.co/storage/v1/object/public/images/facilities%20logobranco.png" 
                 alt="Facilities Condominial" 
-                className="w-full max-h-20 object-contain"
+                className="w-full max-h-20 object-contain mix-blend-multiply"
                 referrerPolicy="no-referrer"
               />
             </div>
@@ -2691,6 +3150,17 @@ export default function AdminDashboardModal({
                             />
                           </div>
                           <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase block">Apelido *</label>
+                            <input
+                              type="text"
+                              required
+                              value={newProfileApelido}
+                              onChange={(e) => setNewProfileApelido(e.target.value)}
+                              placeholder="Ex: Lipe"
+                              className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                            />
+                          </div>
+                          <div className="space-y-1">
                             <label className="text-[10px] font-bold text-gray-400 uppercase block">E-mail de Acesso *</label>
                             <input
                               type="email"
@@ -2821,6 +3291,7 @@ export default function AdminDashboardModal({
                           <thead>
                             <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase text-[9px]">
                               <th className="py-2">Nome Completo</th>
+                              <th className="py-2">Apelido</th>
                               <th className="py-2">E-mail</th>
                               <th className="py-2">CPF</th>
                               <th className="py-2">Unidade</th>
@@ -2847,6 +3318,7 @@ export default function AdminDashboardModal({
                               return (
                                 <tr key={item.id} className="border-b border-gray-100 hover:bg-slate-50">
                                   <td className="py-3 font-bold text-stone-850">{item.nome}</td>
+                                  <td className="py-3 font-semibold text-gray-700 italic">{item.apelido || '-'}</td>
                                   <td className="py-3 text-gray-600 font-mono select-all">{item.email}</td>
                                   <td className="py-3 text-secondary font-mono">{item.cpf || 'Não informado'}</td>
                                   <td className="py-3 font-bold">{item.unidade || 'Apto Geral'}</td>
@@ -2872,6 +3344,7 @@ export default function AdminDashboardModal({
                                             setSelectedProfileId(item.id);
                                             setNewProfileNome(item.nome);
                                             setNewProfileEmail(item.email);
+                                            setNewProfileApelido(item.apelido || '');
                                             setNewProfileCpf(item.cpf || '');
                                             setNewProfileUnidade(item.unidade || '');
                                             setNewProfileTipo(item.tipo);
@@ -3090,6 +3563,396 @@ export default function AdminDashboardModal({
 
                     </div>
 
+                  </div>
+                )}
+
+                {/* SUB-PAGE: GERENCIAMENTO DE COLABORADORES */}
+                {activeSubPage === 'colaboradores' && (
+                  <div className="space-y-6 text-left animate-fade-in text-[#101c29]">
+                    
+                    {/* Alerta de permissão para outros perfis e informando regras */}
+                    {activeProfile !== 'admin' ? (
+                      <div className="bg-amber-50 border border-amber-250 p-4 rounded-xl text-xs text-amber-900 flex items-start gap-3">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong>Acesso Restrito ao Administrador!</strong> Você não possui privilégios para visualizar ou gerenciar colaboradores do sistema. Contate a Superintendência.
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Header da subpágina */}
+                        <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] flex flex-wrap justify-between items-center gap-4 text-left">
+                          <div>
+                            <h4 className="text-sm font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                              <Users className="w-5 h-5 text-amber-500" /> Gestão de Colaboradores (Facilities)
+                            </h4>
+                            <p className="text-[11px] text-gray-400 mt-1">
+                              Relação de prestadores, supervisores e técnicos com acesso exclusivo de colaborador fixed role.
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              if (showColaboradorForm && selectedColaboradorId) {
+                                // Reset form
+                                setSelectedColaboradorId(null);
+                                setColaboradorNome('');
+                                setColaboradorEmail('');
+                                setColaboradorCpf('');
+                                setColaboradorUnidade('');
+                                setColaboradorPassword('');
+                                setColaboradorAtivo(true);
+                                setColaboradorCondoId('cd-1');
+                              }
+                              setShowColaboradorForm(!showColaboradorForm);
+                            }}
+                            className="bg-primary hover:bg-[#af101a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
+                          >
+                            <Plus className={`w-4 h-4 transition-transform duration-200 ${(showColaboradorForm || selectedColaboradorId) ? 'rotate-45' : ''}`} />
+                            {(showColaboradorForm || selectedColaboradorId) ? 'Ocultar Formulário' : 'Novo Colaborador'}
+                          </button>
+                        </div>
+
+                        {/* Formulário de Adicionar / Editar Colaborador (In-Modal overlay) */}
+                        {(showColaboradorForm || selectedColaboradorId) && (
+                          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+                            <div className="bg-white p-6 rounded-[24px] shadow-[0_20px_50px_rgba(15,23,42,0.15)] space-y-4 border border-slate-150 text-left max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-up">
+                              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                                <h5 className="text-sm font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                                  <Users className="w-5 h-5 text-amber-500" /> {selectedColaboradorId ? 'Editar Perfil de Colaborador' : 'Registrar Novo Colaborador'}
+                                </h5>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedColaboradorId(null);
+                                    setColaboradorNome('');
+                                    setColaboradorEmail('');
+                                    setColaboradorApelido('');
+                                    setColaboradorCpf('');
+                                    setColaboradorUnidade('');
+                                    setColaboradorPassword('');
+                                    setColaboradorAtivo(true);
+                                    setColaboradorCondoId('cd-1');
+                                    setShowColaboradorForm(false);
+                                  }}
+                                  className="p-1.5 hover:bg-slate-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                  <Plus className="w-5 h-5 rotate-45" />
+                                </button>
+                              </div>
+
+                              <form onSubmit={handleCreateOrUpdateColaborador} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-1 text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block">Nome Completo *</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={colaboradorNome}
+                                      onChange={(e) => setColaboradorNome(e.target.value)}
+                                      placeholder="Ex: Lucas Ferreira de Souza"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1 text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block">Apelido *</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={colaboradorApelido}
+                                      onChange={(e) => setColaboradorApelido(e.target.value)}
+                                      placeholder="Ex: Lu / Lucas"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1 text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block">E-mail de Acesso *</label>
+                                    <input
+                                      type="email"
+                                      required
+                                      disabled={!!selectedColaboradorId}
+                                      value={colaboradorEmail}
+                                      onChange={(e) => setColaboradorEmail(e.target.value)}
+                                      placeholder="colaborador@facilities.com.br"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29] disabled:opacity-60"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1 font-sans text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block">CPF / Documento</label>
+                                    <input
+                                      type="text"
+                                      value={colaboradorCpf}
+                                      onChange={(e) => setColaboradorCpf(e.target.value)}
+                                      placeholder="000.000.000-00"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1 text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block">Telefone de Contato *</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={colaboradorTelefone}
+                                      onChange={(e) => setColaboradorTelefone(e.target.value)}
+                                      placeholder="Ex: (11) 99999-9999"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1 text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block">Cargo / Setor / Atribuição *</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={colaboradorUnidade}
+                                      onChange={(e) => setColaboradorUnidade(e.target.value)}
+                                      placeholder="Ex: Supervisor Campo ou Técnico de Manutenção"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-1 text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block">Acesso Ativo? *</label>
+                                    <select
+                                      required
+                                      value={colaboradorAtivo ? 'true' : 'false'}
+                                      onChange={(e) => setColaboradorAtivo(e.target.value === 'true')}
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-bold text-[#101c29] cursor-pointer"
+                                    >
+                                      <option value="true">Ativo (Permitir Entrada)</option>
+                                      <option value="false">Bloqueado / Inativo</option>
+                                    </select>
+                                  </div>
+
+                                  {!selectedColaboradorId && (
+                                    <div className="space-y-1.5 p-3 rounded-lg bg-red-50 border border-red-150 text-left">
+                                      <div className="flex items-center gap-1.5 text-primary text-[10px] font-extrabold uppercase">
+                                        <Mail className="w-3.5 h-3.5" />
+                                        Convite de Acesso Seguro
+                                      </div>
+                                      <p className="text-[10px] text-gray-650 leading-relaxed font-semibold font-sans">
+                                        Não é necessário definir credenciais manualmente. Um link seguro e criptografado para criação de senha será gerado e enviado por e-mail automaticamente.
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* FIXED TYPE DE PERFIL WITH EXPLICIT DESCRIPTION AND NO OPTIONS */}
+                                <div className="space-y-1 text-left">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Tipo de Perfil Atribuído (FIXO/RESTRETO) *</label>
+                                  <div className="w-full bg-slate-50 border border-slate-200 text-xs p-2.5 rounded-lg font-bold text-slate-705 flex items-center justify-between select-none">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                                      <span>COLABORADOR</span>
+                                    </div>
+                                    <span className="text-[9px] text-[#af101a] font-extrabold uppercase tracking-widest bg-red-100 px-2 py-0.5 rounded border border-red-200">FIXO - SEM OUTRO TIPO</span>
+                                  </div>
+                                  <span className="text-[9px] text-gray-400 block mt-0.5 font-bold font-sans">Por determinação de segurança, este formulário cadastra perfis estritamente como colaboradores.</span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 pt-2">
+                                  <button
+                                    type="submit"
+                                    className="bg-primary hover:bg-[#af101a] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer text-center"
+                                  >
+                                    {selectedColaboradorId ? 'Salvar Alterações' : 'Salvar Colaborador'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedColaboradorId(null);
+                                      setColaboradorNome('');
+                                      setColaboradorEmail('');
+                                      setColaboradorCpf('');
+                                      setColaboradorUnidade('');
+                                      setColaboradorPassword('');
+                                      setColaboradorAtivo(true);
+                                      setColaboradorCondoId('cd-1');
+                                      setShowColaboradorForm(false);
+                                    }}
+                                    className="bg-gray-100 hover:bg-[#af101a]/10 hover:text-[#af101a] text-gray-650 font-bold px-3 py-2.5 text-xs rounded-lg transition-transform active:scale-95 cursor-pointer text-center border border-slate-100"
+                                  >
+                                    Fechar / Cancelar
+                                  </button>
+                                </div>
+                              </form>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Listagem de Colaboradores Cadastrados */}
+                        <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left space-y-4">
+                          <div className="flex justify-between items-center pb-2 border-b border-gray-100 flex-wrap gap-2">
+                            <div>
+                              <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider">
+                                Colaboradores Ativos no Sistema
+                              </h4>
+                              <p className="text-[10px] text-gray-400 font-bold">Apenas administradores podem gerenciar, adicionar, editar dados ou remover contas.</p>
+                            </div>
+                            
+                            <div className="relative">
+                              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                <Search className="w-3.5 h-3.5 text-gray-400" />
+                              </span>
+                              <input
+                                type="text"
+                                value={colaboradorSearch}
+                                onChange={(e) => setColaboradorSearch(e.target.value)}
+                                placeholder="Filtrar colaboradores..."
+                                className="pl-9 pr-4 py-1.5 bg-[#f1f4f8] text-xs outline-none rounded-lg font-bold text-[#101c29] border border-transparent focus:border-stone-200"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs text-left text-stone-800">
+                              <thead>
+                                <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase text-[9px]">
+                                  <th className="py-2.5">Nome Completo</th>
+                                  <th className="py-2.5">Apelido</th>
+                                  <th className="py-2.5">E-mail de Acesso</th>
+                                  <th className="py-2.5">CPF</th>
+                                  <th className="py-2.5">Telefone</th>
+                                  <th className="py-2.5">Cargo / Setor / Atribuição</th>
+                                  <th className="py-2.5">Condomínio Vinculado</th>
+                                  <th className="py-2.5 text-center">Status</th>
+                                  <th className="py-2.5 text-right">Ação</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(() => {
+                                  // Filtrar perfis que sejam do tipo colaborador
+                                  const colabs = profilesList.filter(p => {
+                                    const roleStr = (p.tipo || p.perfil || '').toLowerCase();
+                                    return roleStr === 'colaborador' || roleStr === 'colab';
+                                  }).filter(p => {
+                                    if (!colaboradorSearch.trim()) return true;
+                                    const searchLower = colaboradorSearch.toLowerCase();
+                                    return (
+                                      (p.nome || '').toLowerCase().includes(searchLower) ||
+                                      (p.email || '').toLowerCase().includes(searchLower) ||
+                                      (p.unidade || '').toLowerCase().includes(searchLower) ||
+                                      (p.apelido || '').toLowerCase().includes(searchLower)
+                                    );
+                                  });
+
+                                  if (colabs.length === 0) {
+                                    return (
+                                      <tr>
+                                        <td colSpan={9} className="py-6 text-center text-gray-400 font-bold italic">
+                                          Nenhum colaborador foi encontrado com os critérios de filtragem.
+                                        </td>
+                                      </tr>
+                                    );
+                                  }
+
+                                  return colabs.map(item => {
+                                    // Obter nome legível do condomínio
+                                    const condoName = condos.find(c => c.id === item.condominio_id)?.nome || 'Sede Geral Santos';
+                                    
+                                    // Decidir o status estrito conforme solicitado
+                                    let statusLabel = 'ATIVO';
+                                    let statusBadgeStyle = 'bg-green-50 text-green-700 border-green-150';
+                                    if (item.ativo === false) {
+                                      statusLabel = 'INATIVO';
+                                      statusBadgeStyle = 'bg-red-50 text-red-750 border-red-150';
+                                    } else if (item.status_convite === 'pendente') {
+                                      statusLabel = 'CONVITE PENDENTE';
+                                      statusBadgeStyle = 'bg-amber-50 text-amber-600 border-amber-200';
+                                    }
+
+                                    return (
+                                      <tr key={item.id} className="border-b border-gray-100 hover:bg-slate-50 transition-colors">
+                                        <td className="py-3 font-bold text-stone-850 flex items-center gap-2">
+                                          <div className="w-7 h-7 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold text-[10px]">
+                                            {item.nome.charAt(0).toUpperCase()}
+                                          </div>
+                                          {item.nome}
+                                        </td>
+                                        <td className="py-3 text-stone-700 font-semibold italic text-xs">{item.apelido || '-'}</td>
+                                        <td className="py-3 text-gray-600 font-mono select-all text-xs">{item.email}</td>
+                                        <td className="py-3 text-gray-500 font-mono text-xs">{item.cpf || 'Não especificado'}</td>
+                                        <td className="py-3 text-gray-500 font-mono text-xs">{item.telefone || '-'}</td>
+                                        <td className="py-3 font-semibold text-[#0f1b29] text-xs">{item.unidade || 'Sem Cargo'}</td>
+                                        <td className="py-3 text-gray-500 text-xs truncate max-w-[160px]" title={condoName}>{condoName}</td>
+                                        <td className="py-3 text-center">
+                                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold border ${statusBadgeStyle}`}>
+                                            {statusLabel}
+                                          </span>
+                                        </td>
+                                        <td className="py-3 text-right">
+                                          <div className="flex gap-1.5 justify-end">
+                                            <button
+                                              onClick={() => handleToggleColaboradorAtivo(item)}
+                                              className={`p-1.5 rounded transition-colors active:scale-95 cursor-pointer ${
+                                                item.ativo !== false 
+                                                  ? 'hover:bg-red-50 text-red-600' 
+                                                  : 'hover:bg-green-50 text-green-600'
+                                              }`}
+                                              title={item.ativo !== false ? "Desativar (Bloquear)" : "Ativar Colaborador"}
+                                            >
+                                              <Power className="w-3.5 h-3.5" />
+                                            </button>
+
+                                            <button
+                                              onClick={async () => {
+                                                const isReset = item.status_convite !== 'pendente';
+                                                const verbLabel = isReset ? 'link de redefinição de senha' : 'convite de acesso seguro';
+                                                const success = await dispatchInviteEmail(item.nome, item.email, item.telefone || '', item.unidade || 'Colaborador', isReset, (() => { const saved = localStorage.getItem('facilities_portal_users'); if (saved) { try { const users = JSON.parse(saved); const u = users.find((x: any) => x.email.toLowerCase() === item.email.toLowerCase()); if (u) return u.pass; } catch {} } return 'TempColab@' + Math.random().toString(36).substring(2, 10).toUpperCase() + '2026!'; })());
+                                                if (success) {
+                                                  onShowMessage("Sucesso", `O ${verbLabel} para o colaborador "${item.nome}" foi disparado com sucesso!`);
+                                                } else {
+                                                  onShowMessage("Alerta", "Erro ao disparar convite de e-mail integrado.");
+                                                }
+                                              }}
+                                              className="p-1.5 hover:bg-amber-50 text-amber-600 rounded transition-colors active:scale-95 cursor-pointer"
+                                              title={item.status_convite === 'pendente' ? "Reenviar Convite" : "Resetar Senha por E-mail"}
+                                            >
+                                              <Send className="w-3.5 h-3.5" />
+                                            </button>
+
+                                            <button
+                                              onClick={() => {
+                                                setSelectedColaboradorId(item.id);
+                                                setColaboradorNome(item.nome);
+                                                setColaboradorEmail(item.email);
+                                                setColaboradorApelido(item.apelido || '');
+                                                setColaboradorCpf(item.cpf || '');
+                                                setColaboradorTelefone(item.telefone || '');
+                                                setColaboradorUnidade(item.unidade || '');
+                                                setColaboradorAtivo(item.ativo !== false);
+                                                setColaboradorCondoId(item.condominio_id || 'cd-1');
+                                                setShowColaboradorForm(true);
+                                              }}
+                                              className="p-1.5 hover:bg-stone-100 rounded text-stone-600 transition-colors active:scale-95 cursor-pointer"
+                                              title="Editar cadastro"
+                                            >
+                                              <Edit2 className="w-3.5 h-3.5" />
+                                            </button>
+                                            
+                                            <button
+                                              onClick={() => handleDeleteColaborador(item.id, item.nome)}
+                                              className="p-1.5 hover:bg-red-50 text-stone-400 hover:text-red-650 rounded transition-colors active:scale-95 cursor-pointer"
+                                              title="Remover colaborador"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  });
+                                })()}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 

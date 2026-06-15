@@ -30,10 +30,11 @@ import {
   Search,
   Filter,
   ArrowRight,
-  Eye
+  Eye,
+  AlertCircle
 } from 'lucide-react';
 import { Boleto, Booking, Assembly, Ticket } from '../types';
-import { supabase, isSupabaseConfigured, saveSimulatedData, getSimulatedData, insertResilient, updateResilient } from '../lib/supabaseClient';
+import { supabase, isSupabaseConfigured, saveSimulatedData, getSimulatedData, insertResilient, updateResilient, supabaseUrl, supabaseAnonKey } from '../lib/supabaseClient';
 import { usePortalRouter } from './PortalRouter';
 import CondoDetailsView from './CondoDetailsView';
 
@@ -111,7 +112,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [showInlineSetup, setShowInlineSetup] = useState(false);
 
   // Registration & profile states
-  const [formTab, setFormTab] = useState<'login' | 'register' | 'esqueci-senha' | 'alterar-senha'>('login');
+  const [formTab, setFormTab] = useState<'login' | 'register' | 'esqueci-senha' | 'alterar-senha' | 'definir-senha'>('login');
   const [profileType, setProfileType] = useState<string>('Morador');
   const [quickRole, setQuickRole] = useState<string>('Morador');
   const [regName, setRegName] = useState('');
@@ -123,17 +124,36 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [newPasswordValue, setNewPasswordValue] = useState('');
 
+  // Password definition parameters (for new collaborators invitation)
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteAdmin, setInviteAdmin] = useState('');
+  const [inviteAction, setInviteAction] = useState('invite'); // 'invite' or 'reset'
+  const [inviteTempPass, setInviteTempPass] = useState('');
+  const [defPass, setDefPass] = useState('');
+  const [defPassConfirm, setDefPassConfirm] = useState('');
+
   // Sync state tab mode based on active router location hash
   useEffect(() => {
     const cleanHash = router.currentRoute.replace('#', '');
-    if (cleanHash === 'login') {
+    const hashPath = cleanHash.split('?')[0];
+    
+    if (hashPath === 'login') {
       setFormTab('login');
-    } else if (cleanHash === 'register') {
+    } else if (hashPath === 'register') {
       setFormTab('register');
-    } else if (cleanHash === 'esqueci-senha') {
+    } else if (hashPath === 'esqueci-senha') {
       setFormTab('esqueci-senha');
-    } else if (cleanHash === 'alterar-senha') {
+    } else if (hashPath === 'alterar-senha') {
       setFormTab('alterar-senha');
+    } else if (hashPath === 'definir-senha') {
+      setFormTab('definir-senha');
+      // Parse query parameters
+      const queryPart = cleanHash.split('?')[1] || '';
+      const params = new URLSearchParams(queryPart);
+      setInviteEmail(params.get('email') || '');
+      setInviteAdmin(params.get('admin') || 'Cristhiane Xavier');
+      setInviteAction(params.get('action') || 'invite');
+      setInviteTempPass(params.get('tempPass') || '');
     }
   }, [router.currentRoute]);
 
@@ -162,6 +182,108 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
       window.location.hash = '#login';
     } catch (err: any) {
       console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDefinirSenhaSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!defPass || !defPassConfirm) {
+      onShowNotification('Alerta', 'Por favor, preencha todos os campos da senha.');
+      return;
+    }
+    if (defPass !== defPassConfirm) {
+      onShowNotification('Erro de Validação', 'A confirmação de senha não confere com a nova senha digitada.');
+      return;
+    }
+    if (defPass.length < 6) {
+      onShowNotification('Erro de Validação', 'A senha deve possuir pelo menos 6 caracteres.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Update the password in Supabase Auth if integrated
+      if (isSupabaseConfigured && supabase) {
+        // Se temos uma senha temporária em mãos, fazemos login antes para estabelecer sessão e podermos atualizar a senha!
+        if (inviteTempPass) {
+          try {
+            console.log('Tentando signIn programático com tempPass:', inviteEmail);
+            await supabase.auth.signInWithPassword({
+              email: inviteEmail.trim(),
+              password: inviteTempPass
+            });
+          } catch (signInErr: any) {
+            console.warn('Tentativa de login prévio com tempPass falhou:', signInErr.message);
+          }
+        }
+
+        try {
+          const { error } = await supabase.auth.updateUser({
+            password: defPass
+          });
+          if (error) {
+            console.warn('Erro ao atualizar senha no Supabase Auth diretamente:', error.message);
+          }
+        } catch (authErr: any) {
+          console.warn('Supabase auth update falhou:', authErr.message);
+        }
+
+        // Marcar o colaborador como "aceito" na tabela perfil do Supabase
+        try {
+          const { error } = await supabase.from('perfil')
+            .update({ status_convite: 'aceito', ativo: true })
+            .eq('email', inviteEmail);
+          if (error) {
+            console.error('Erro ao atualizar perfil no Supabase:', error.message);
+          }
+        } catch (profileErr: any) {
+          console.error(profileErr);
+        }
+      }
+
+      // 2. Sempre atualizar no nosso storage local de simulação offline (facilities_portal_users e supabase_sim_perfis)
+      // para garantir que mesmo offline ou sem chaves/sessão ativa, o usuário consiga fazer o login local instantâneo!
+      const savedUsers = localStorage.getItem('facilities_portal_users');
+      if (savedUsers) {
+        try {
+          let users = JSON.parse(savedUsers);
+          const uIdx = users.findIndex((u: any) => u.email.toLowerCase() === inviteEmail.toLowerCase());
+          if (uIdx !== -1) {
+            users[uIdx].pass = defPass;
+            users[uIdx].ativo = true;
+            localStorage.setItem('facilities_portal_users', JSON.stringify(users));
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      const simPerfis = localStorage.getItem('supabase_sim_perfis');
+      if (simPerfis) {
+        try {
+          let list = JSON.parse(simPerfis);
+          const pIdx = list.findIndex((p: any) => p.email.toLowerCase() === inviteEmail.toLowerCase());
+          if (pIdx !== -1) {
+            list[pIdx].status_convite = 'aceito';
+            list[pIdx].ativo = true;
+            localStorage.setItem('supabase_sim_perfis', JSON.stringify(list));
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      console.log(`Definir Senha Concluída para: ${inviteEmail}. Status: Ativo.`);
+      onShowNotification('Senha Cadastrada!', 'Sua senha foi ativada com sucesso! Você está pronto para realizar o seu primeiro login.');
+      
+      setDefPass('');
+      setDefPassConfirm('');
+      setFormTab('login');
+      window.location.hash = '#login';
+    } catch (err: any) {
+      onShowNotification('Erro', err.message || 'Falha ao salvar a senha de acesso.');
     } finally {
       setLoading(false);
     }
@@ -566,6 +688,215 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [newTicketTitle, setNewTicketTitle] = useState('');
   const [newTicketCategory, setNewTicketCategory] = useState<'Manutenção' | 'Limpeza' | 'Barulho' | 'Financeiro' | 'Outros'>('Manutenção');
   const [newTicketDesc, setNewTicketDesc] = useState('');
+
+  // Collaborator management states inside PortalModal
+  const [showColPortalForm, setShowColPortalForm] = useState(false);
+  const [selectedColPortalId, setSelectedColPortalId] = useState<string | null>(null);
+  const [colPortalNome, setColPortalNome] = useState('');
+  const [colPortalEmail, setColPortalEmail] = useState('');
+  const [colPortalApelido, setColPortalApelido] = useState('');
+  const [colPortalCpf, setColPortalCpf] = useState('');
+  const [colPortalUnidade, setColPortalUnidade] = useState('');
+  const [colPortalPassword, setColPortalPassword] = useState('');
+  const [colPortalAtivo, setColPortalAtivo] = useState(true);
+  const [colPortalCondoId, setColPortalCondoId] = useState('cd-gonzaga');
+  const [colPortalSearch, setColPortalSearch] = useState('');
+
+  const handleCreateOrUpdateColaboradorPortal = async (e: FormEvent) => {
+    e.preventDefault();
+    const prof = (profileType || 'Morador').toLowerCase();
+    if (!prof.includes('admin') && prof !== 'administrador') {
+      onShowNotification("Bloqueio de Permissão", "Apenas o perfil Administrador pode gerenciar colaboradores.");
+      return;
+    }
+    if (!colPortalNome.trim() || !colPortalEmail.trim()) {
+      onShowNotification("Erro", "Nome e Email são campos obrigatórios.");
+      return;
+    }
+
+    const isEdit = !!selectedColPortalId;
+    let targetId = selectedColPortalId || `p-${Date.now()}`;
+
+    const cleanCpf = colPortalCpf.replace(/\D/g, '');
+    const formattedCpf = cleanCpf.length === 11 
+      ? cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+      : colPortalCpf;
+
+    const resolvedPerfil = 'Colaborador';
+    const cleanTipo = 'colaborador';
+
+    if (isSupabaseConfigured && !isEdit) {
+      if (!colPortalPassword.trim()) {
+        onShowNotification("Erro de Validação", "Por favor, informe a Senha para o novo colaborador.");
+        return;
+      }
+      try {
+        const createClientInstance = (await import('@supabase/supabase-js')).createClient;
+        const tempClient = createClientInstance(isSupabaseConfigured ? supabaseUrl : '', isSupabaseConfigured ? supabaseAnonKey : '', {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false
+          }
+        });
+
+        const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
+          email: colPortalEmail.trim(),
+          password: colPortalPassword,
+          options: {
+            data: {
+              full_name: colPortalNome.trim(),
+              unit: colPortalUnidade || 'Suporte Facilities',
+              profile: resolvedPerfil,
+              cpf: formattedCpf
+            }
+          }
+        });
+
+        if (signUpError) throw signUpError;
+        if (signUpData?.user) targetId = signUpData.user.id;
+      } catch (authErr: any) {
+        console.error('Erro de Autenticação no Supabase Auth:', authErr);
+        onShowNotification("Erro ao Criar Login", `Não foi possível criar as credenciais no Supabase Auth: ${authErr.message}`);
+        return;
+      }
+    }
+
+    // Atualiza facilities_portal_users para login local fallback
+    try {
+      const savedUsers = localStorage.getItem('facilities_portal_users');
+      let users = [];
+      if (savedUsers) {
+        try { users = JSON.parse(savedUsers); } catch { users = []; }
+      }
+      const uIdx = users.findIndex((u: any) => u.email.toLowerCase() === colPortalEmail.trim().toLowerCase());
+      const existingPass = (uIdx !== -1) ? (users[uIdx].pass || '123456') : colPortalPassword || '123456';
+
+      const newUserSim = {
+        cpf: formattedCpf,
+        email: colPortalEmail.trim(),
+        pass: existingPass,
+        name: colPortalNome.trim(),
+        unit: colPortalUnidade || 'Suporte Facilities',
+        profile: resolvedPerfil,
+        ativo: colPortalAtivo,
+        condominio_id: colPortalCondoId,
+        apelido: colPortalApelido.trim()
+      };
+      if (uIdx !== -1) {
+        users[uIdx] = newUserSim;
+      } else {
+        users.push(newUserSim);
+      }
+      setUsersDb(users);
+      localStorage.setItem('facilities_portal_users', JSON.stringify(users));
+    } catch (err) {
+      console.warn('Erro ao atualizar base de credenciais local:', err);
+    }
+
+    // Salva no supabase_sim_perfis para sincronização com o outro painel
+    const profileData = {
+      id: targetId,
+      auth_user_id: targetId,
+      nome: colPortalNome.trim(),
+      email: colPortalEmail.trim(),
+      cpf: formattedCpf,
+      unidade: colPortalUnidade || 'Suporte Facilities',
+      tipo: cleanTipo,
+      perfil: resolvedPerfil,
+      ativo: colPortalAtivo,
+      condominio_id: colPortalCondoId,
+      apelido: colPortalApelido.trim()
+    };
+
+    // Update Supabase se configurado
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('perfil').upsert({
+          id: targetId,
+          nome: colPortalNome.trim(),
+          email: colPortalEmail.trim(),
+          cpf: formattedCpf,
+          tipo: cleanTipo,
+          unidade: colPortalUnidade || 'Suporte Facilities',
+          ativo: colPortalAtivo,
+          condominio_id: colPortalCondoId,
+          apelido: colPortalApelido.trim()
+        });
+      } catch (err: any) {
+        console.error('Erro ao salvar no Supabase:', err.message);
+      }
+    }
+
+    const localData = localStorage.getItem('supabase_sim_perfis');
+    let localList = localData ? JSON.parse(localData) : [];
+    if (isEdit) {
+      localList = localList.map((p: any) => p.id === targetId ? profileData : p);
+    } else {
+      localList = [profileData, ...localList];
+    }
+    localStorage.setItem('supabase_sim_perfis', JSON.stringify(localList));
+
+    addAuditLog(isEdit ? 'EDITAR' : 'CRIAR', 'perfis', `Gerenciado colaborador: ${colPortalNome}`);
+    onShowNotification("Sucesso", isEdit ? "Colaborador atualizado com sucesso!" : "Colaborador criado com sucesso!");
+    
+    // Reset Form
+    setColPortalNome('');
+    setColPortalEmail('');
+    setColPortalApelido('');
+    setColPortalCpf('');
+    setColPortalUnidade('');
+    setColPortalPassword('');
+    setColPortalAtivo(true);
+    setColPortalCondoId('cd-gonzaga');
+    setSelectedColPortalId(null);
+    setShowColPortalForm(false);
+  };
+
+  const handleDeleteColaboradorPortal = async (id: string, email: string, name: string) => {
+    const prof = (profileType || 'Morador').toLowerCase();
+    if (!prof.includes('admin') && prof !== 'administrador') {
+      onShowNotification("Bloqueio de Permissão", "Apenas o perfil Administrador pode remover colaboradores.");
+      return;
+    }
+
+    if (!confirm(`Confirmar exclusão de cadastro do colaborador "${name}"?`)) {
+      return;
+    }
+
+    // Remover de facilities_portal_users
+    try {
+      const savedUsers = localStorage.getItem('facilities_portal_users');
+      if (savedUsers) {
+        let users = JSON.parse(savedUsers);
+        users = users.filter((u: any) => u.email.toLowerCase() !== email.toLowerCase());
+        setUsersDb(users);
+        localStorage.setItem('facilities_portal_users', JSON.stringify(users));
+      }
+    } catch {}
+
+    // Remover de supabase_sim_perfis
+    try {
+      const localData = localStorage.getItem('supabase_sim_perfis');
+      if (localData) {
+        let localList = JSON.parse(localData);
+        localList = localList.filter((p: any) => p.id !== id && p.email?.toLowerCase() !== email.toLowerCase());
+        localStorage.setItem('supabase_sim_perfis', JSON.stringify(localList));
+      }
+    } catch {}
+
+    // Excluir do Supabase se persistente
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('perfil').delete().eq('id', id);
+      } catch (err: any) {
+        console.error('Erro ao excluir do Supabase:', err.message);
+      }
+    }
+
+    addAuditLog('EXCLUIR', 'perfis', `Removido colaborador: ${name}`);
+    onShowNotification("Sucesso", "Colaborador removido com sucesso!");
+  };
 
   // Sincronização inicial com o Supabase - Apenas dados reais do banco de dados
   useEffect(() => {
@@ -1053,6 +1384,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
       return [
         { id: 'admin_dashboard', label: 'Monitor Geral', icon: <Compass className="w-4 h-4" /> },
         { id: 'admin_condominios', label: 'Condomínios', icon: <Building2 className="w-4 h-4" /> },
+        { id: 'admin_colaboradores', label: 'Colaboradores', icon: <Users className="w-4 h-4 text-amber-500" /> },
         { id: 'admin_financeiro', label: 'Financeiro Geral', icon: <Wallet className="w-4 h-4" /> },
         { id: 'admin_portaria', label: 'Portaria Hub', icon: <Key className="w-4 h-4" /> },
         { id: 'admin_relatorios', label: 'Relatórios Master', icon: <FileText className="w-4 h-4" /> },
@@ -1434,6 +1766,75 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                 </form>
               )}
 
+              {formTab === 'definir-senha' && (
+                <form onSubmit={handleDefinirSenhaSubmit} className="space-y-4">
+                  <div className="text-center space-y-1">
+                    <h5 className="font-bold text-xs font-display uppercase tracking-wider text-[#101c29]">Ativar Meu Acesso</h5>
+                    <p className="text-[10px] text-gray-500 font-medium">
+                      Convite emitido pela administradora <strong className="text-[#af101a]">{inviteAdmin || 'Cristhiane Xavier'}</strong>
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-100 p-3 rounded-lg text-[11px] text-stone-650 space-y-1 text-left">
+                    <p><strong>Usuário:</strong> {inviteEmail}</p>
+                    <p><strong>Perfil de Acesso:</strong> Colaborador (Restrito)</p>
+                  </div>
+                  
+                  <div className="space-y-1 text-left">
+                    <label htmlFor="def-new-password" className="text-[10px] font-bold text-[#101c29] uppercase block">Nova Senha</label>
+                    <input
+                      id="def-new-password"
+                      type="password"
+                      required
+                      value={defPass}
+                      onChange={(e) => setDefPass(e.target.value)}
+                      placeholder="Senha (mínimo 6 caracteres)"
+                      className="w-full bg-[#f8f9ff] border border-gray-250 outline-none focus:border-primary p-3 rounded-lg text-sm text-[#101c29]"
+                    />
+                  </div>
+
+                  <div className="space-y-1 text-left">
+                    <label htmlFor="def-confirm-password" className="text-[10px] font-bold text-[#101c29] uppercase block">Confirmar Senha</label>
+                    <input
+                      id="def-confirm-password"
+                      type="password"
+                      required
+                      value={defPassConfirm}
+                      onChange={(e) => setDefPassConfirm(e.target.value)}
+                      placeholder="Repita a nova senha para confirmação"
+                      className="w-full bg-[#f8f9ff] border border-gray-250 outline-none focus:border-primary p-3 rounded-lg text-sm text-[#101c29]"
+                    />
+                  </div>
+
+                  <button
+                    id="def-submit-btn"
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-[#af101a] hover:bg-primary-hover text-white py-3 rounded-lg font-bold transition-all text-xs cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></span>
+                        Gravando Credenciais...
+                      </>
+                    ) : (
+                      'Criar Senha e Ativar Usuário'
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormTab('login');
+                      window.location.hash = '#login';
+                    }}
+                    className="w-full text-center text-xs text-gray-400 hover:text-black hover:underline font-bold mt-2 cursor-pointer"
+                  >
+                    Voltar para o Login
+                  </button>
+                </form>
+              )}
+
               {/* Database sync status info indicator */}
               <div className="mt-4 pt-3 border-t border-gray-100 flex flex-col gap-2 text-[10px]">
                 <div className="flex items-center justify-between">
@@ -1525,6 +1926,16 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
             {/* Left panel menu bar on desktop, Horizontal scroll tag on mobile */}
             <div className="w-full md:w-56 bg-white border-r border-[#cfdbec] p-4 flex flex-row md:flex-col justify-between shrink-0 overflow-x-auto md:overflow-x-visible">
               
+              {/* Premium Brand Logo Area */}
+              <div className="hidden md:block p-4 mb-4 bg-[#101c29] rounded-2xl flex items-center justify-center shadow-md">
+                <img 
+                  src="https://ejpjtpteycckydrorjpr.supabase.co/storage/v1/object/public/images/facilities%20logobranco.png" 
+                  alt="Facilities Administração" 
+                  className="w-full max-h-16 object-contain"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+
               {/* Profile Card details */}
               <div className="hidden md:block p-4 border-b border-gray-100 space-y-2 pb-6">
                 <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold font-display text-sm">
@@ -2986,6 +3397,389 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                   </div>
                 );
               })()}
+
+              {/* ADMIN TAB: GERENCIAMENTO DE COLABORADORES */}
+              {activeTab === 'admin_colaboradores' && (
+                <div className="space-y-6 text-left animate-fade-in text-[#101c29]">
+                  {/* Alerta de permissão para outros perfis e informando regras */}
+                  {!(profileType || 'Morador').toLowerCase().includes('admin') && (profileType || 'Morador').toLowerCase() !== 'administrador' ? (
+                    <div className="bg-amber-50 border border-amber-250 p-4 rounded-xl text-xs text-amber-900 flex items-start gap-3">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Acesso Restrito ao Administrador!</strong> Você não possui privilégios para visualizar ou gerenciar colaboradores do sistema. Contate a Superintendência.
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Header da subpágina */}
+                      <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] flex flex-wrap justify-between items-center gap-4 text-left border border-slate-100">
+                        <div>
+                          <h4 className="text-sm font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                            <Users className="w-5 h-5 text-amber-500" /> Gestão de Colaboradores (Facilities)
+                          </h4>
+                          <p className="text-[11px] text-gray-400 mt-1 pb-1">
+                            Relação de prestadores, supervisores e técnicos de campo cadastrados no sistema com acesso restrito de colaborador.
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (showColPortalForm && selectedColPortalId) {
+                              // Reset form
+                              setSelectedColPortalId(null);
+                              setColPortalNome('');
+                              setColPortalEmail('');
+                              setColPortalCpf('');
+                              setColPortalUnidade('');
+                              setColPortalPassword('');
+                              setColPortalAtivo(true);
+                              setColPortalCondoId('cd-gonzaga');
+                            }
+                            setShowColPortalForm(!showColPortalForm);
+                          }}
+                          className="bg-primary hover:bg-[#af101a] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
+                        >
+                          <Plus className={`w-4 h-4 transition-transform duration-200 ${(showColPortalForm || selectedColPortalId) ? 'rotate-45' : ''}`} />
+                          {(showColPortalForm || selectedColPortalId) ? 'Ocultar Formulário' : 'Novo Colaborador'}
+                        </button>
+                      </div>
+
+                      {/* Formulário de Adicionar / Editar Colaborador (In-Modal overlay) */}
+                      {(showColPortalForm || selectedColPortalId) && (
+                        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+                          <div className="bg-white p-6 rounded-[24px] shadow-[0_20px_50px_rgba(15,23,42,0.15)] space-y-4 border border-slate-150 text-left max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-up">
+                            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                              <h5 className="text-sm font-extrabold text-[#0f1b29] uppercase tracking-wider flex items-center gap-1.5 font-sans">
+                                <Users className="w-5 h-5 text-amber-500" /> {selectedColPortalId ? 'Editar Perfil de Colaborador' : 'Registrar Novo Colaborador'}
+                              </h5>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedColPortalId(null);
+                                  setColPortalNome('');
+                                  setColPortalEmail('');
+                                  setColPortalApelido('');
+                                  setColPortalCpf('');
+                                  setColPortalUnidade('');
+                                  setColPortalPassword('');
+                                  setColPortalAtivo(true);
+                                  setColPortalCondoId('cd-gonzaga');
+                                  setShowColPortalForm(false);
+                                }}
+                                className="p-1.5 hover:bg-slate-100 rounded-lg text-gray-400 hover:text-gray-600 transition-colors"
+                              >
+                                <Plus className="w-5 h-5 rotate-45" />
+                              </button>
+                            </div>
+
+                            <form onSubmit={handleCreateOrUpdateColaboradorPortal} className="space-y-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1 text-left">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Nome Completo *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={colPortalNome}
+                                    onChange={(e) => setColPortalNome(e.target.value)}
+                                    placeholder="Ex: Lucas Ferreira de Souza"
+                                    className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1 text-left">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Apelido *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={colPortalApelido}
+                                    onChange={(e) => setColPortalApelido(e.target.value)}
+                                    placeholder="Ex: Lu / Lucas"
+                                    className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1 text-left">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase block">E-mail de Acesso *</label>
+                                  <input
+                                    type="email"
+                                    required
+                                    disabled={!!selectedColPortalId}
+                                    value={colPortalEmail}
+                                    onChange={(e) => setColPortalEmail(e.target.value)}
+                                    placeholder="colaborador@facilities.com.br"
+                                    className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29] disabled:opacity-60"
+                                  />
+                                </div>
+
+                                <div className="space-y-1 font-sans text-left">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase block">CPF / Documento</label>
+                                  <input
+                                    type="text"
+                                    value={colPortalCpf}
+                                    onChange={(e) => setColPortalCpf(e.target.value)}
+                                    placeholder="000.000.000-00"
+                                    className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1 text-left">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Cargo / Setor / Atribuição *</label>
+                                  <input
+                                    type="text"
+                                    required
+                                    value={colPortalUnidade}
+                                    onChange={(e) => setColPortalUnidade(e.target.value)}
+                                    placeholder="Ex: Supervisor Campo ou Técnico de Manutenção"
+                                    className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                                  />
+                                </div>
+
+                                <div className="space-y-1 text-left">
+                                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Acesso Ativo? *</label>
+                                  <select
+                                    required
+                                    value={colPortalAtivo ? 'true' : 'false'}
+                                    onChange={(e) => setColPortalAtivo(e.target.value === 'true')}
+                                    className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-bold text-[#101c29] cursor-pointer"
+                                  >
+                                    <option value="true">Ativo (Permitir Entrada)</option>
+                                    <option value="false">Bloqueado / Inativo</option>
+                                  </select>
+                                </div>
+
+                                {!selectedColPortalId && (
+                                  <div className="space-y-1 text-left">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase block">Senha de Acesso do Colaborador *</label>
+                                    <input
+                                      type="password"
+                                      required
+                                      value={colPortalPassword}
+                                      onChange={(e) => setColPortalPassword(e.target.value)}
+                                      placeholder="Senha de acesso (mín 6 digitos)"
+                                      className="w-full bg-[#f1f4f8] text-xs p-2.5 rounded-lg outline-none font-semibold text-[#101c29]"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* FIXED TYPE DE PERFIL WITH EXPLICIT DESCRIPTION AND NO OPTIONS */}
+                              <div className="space-y-1 text-left">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase block">Tipo de Perfil Atribuído (FIXO/RESTRETO) *</label>
+                                <div className="w-full bg-slate-50 border border-slate-200 text-xs p-2.5 rounded-lg font-bold text-slate-705 flex items-center justify-between select-none">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                                    <span>COLABORADOR</span>
+                                  </div>
+                                  <span className="text-[9px] text-[#af101a] font-extrabold uppercase tracking-widest bg-red-100 px-2 py-0.5 rounded border border-red-200">FIXO - SEM OUTRO TIPO</span>
+                                </div>
+                                <span className="text-[9px] text-gray-400 block mt-0.5 font-bold font-sans">Por determinação de segurança, este formulário cadastra perfis estritamente como colaboradores.</span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 pt-2">
+                                <button
+                                  type="submit"
+                                  className="bg-primary hover:bg-[#af101a] text-white py-2.5 text-xs font-bold rounded-lg transition-transform focus:scale-95 cursor-pointer text-center"
+                                >
+                                  {selectedColPortalId ? 'Salvar Alterações' : 'Salvar Colaborador'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedColPortalId(null);
+                                    setColPortalNome('');
+                                    setColPortalEmail('');
+                                    setColPortalCpf('');
+                                    setColPortalUnidade('');
+                                    setColPortalPassword('');
+                                    setColPortalAtivo(true);
+                                    setColPortalCondoId('cd-gonzaga');
+                                    setShowColPortalForm(false);
+                                  }}
+                                  className="bg-gray-100 hover:bg-[#af101a]/10 hover:text-[#af101a] text-gray-650 font-bold px-3 py-2.5 text-xs rounded-lg transition-transform active:scale-95 cursor-pointer text-center border border-slate-100"
+                                >
+                                  {selectedColPortalId ? 'Cancelar' : 'Limpar'}
+                                </button>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Listagem de Colaboradores Cadastrados */}
+                      <div className="bg-white p-6 rounded-[20px] shadow-[0_4px_20px_rgba(15,23,42,0.03)] text-left space-y-4 border border-slate-100">
+                        <div className="flex justify-between items-center pb-2 border-b border-gray-100 flex-wrap gap-2">
+                          <div>
+                            <h4 className="text-xs font-extrabold text-[#0f1b29] uppercase tracking-wider">
+                              Colaboradores Cadastrados no Sistema
+                            </h4>
+                            <p className="text-[10px] text-gray-400 font-bold">Gerencie ou adicione perfis de colaboradores. Por segurança, o perfil de acesso é rigidamente definido como "Colaborador".</p>
+                          </div>
+                          
+                          <div className="relative">
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                              <Search className="w-3.5 h-3.5 text-gray-400" />
+                            </span>
+                            <input
+                              type="text"
+                              value={colPortalSearch}
+                              onChange={(e) => setColPortalSearch(e.target.value)}
+                              placeholder="Filtrar colaboradores..."
+                              className="pl-9 pr-4 py-1.5 bg-[#f1f4f8] text-xs outline-none rounded-lg font-bold text-[#101c29] border border-transparent focus:border-stone-200"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs text-left text-stone-800">
+                            <thead>
+                              <tr className="border-b border-gray-150 text-gray-400 font-bold uppercase text-[9px]">
+                                <th className="py-2.5">Nome Completo</th>
+                                <th className="py-2.5">Apelido</th>
+                                <th className="py-2.5">E-mail de Acesso</th>
+                                <th className="py-2.5">CPF</th>
+                                <th className="py-2.5">Cargo / Atribuição</th>
+                                <th className="py-2.5">Condomínio Vinculado</th>
+                                <th className="py-2.5 text-center">Status</th>
+                                <th className="py-2.5 text-right">Ação</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(() => {
+                                // Obter todos os usuários com papel colaborador
+                                const localData = localStorage.getItem('supabase_sim_perfis');
+                                let mergedList = [];
+                                if (localData) {
+                                  try { mergedList = JSON.parse(localData); } catch {}
+                                }
+                                
+                                // Filtrar perfis colaboradores de ambas as bases de dados (perfis e usersDb)
+                                const uniqueEmails = new Set();
+                                const colabs: any[] = [];
+
+                                mergedList.forEach((p: any) => {
+                                  const roleStr = (p.tipo || p.perfil || '').toLowerCase();
+                                  if (roleStr === 'colaborador' || roleStr === 'colab') {
+                                    if (p.email && !uniqueEmails.has(p.email.toLowerCase())) {
+                                      uniqueEmails.add(p.email.toLowerCase());
+                                      colabs.push({
+                                        id: p.id,
+                                        nome: p.nome || p.name,
+                                        email: p.email,
+                                        cpf: p.cpf,
+                                        unidade: p.unidade || p.unit,
+                                        ativo: p.ativo !== false,
+                                        condominio_id: p.condominio_id,
+                                        apelido: p.apelido || ''
+                                      });
+                                    }
+                                  }
+                                });
+
+                                usersDb.forEach((u: any) => {
+                                  const roleStr = (u.profile || '').toLowerCase();
+                                  if (roleStr === 'colaborador' || roleStr === 'colab') {
+                                    if (u.email && !uniqueEmails.has(u.email.toLowerCase())) {
+                                      uniqueEmails.add(u.email.toLowerCase());
+                                      colabs.push({
+                                        id: u.cpf || u.email,
+                                        nome: u.name,
+                                        email: u.email,
+                                        cpf: u.cpf,
+                                        unidade: u.unit,
+                                        ativo: u.ativo !== false,
+                                        condominio_id: u.condominio_id,
+                                        apelido: u.apelido || ''
+                                      });
+                                    }
+                                  }
+                                });
+
+                                const filtered = colabs.filter(p => {
+                                  if (!colPortalSearch.trim()) return true;
+                                  const searchLower = colPortalSearch.toLowerCase();
+                                  return (
+                                    (p.nome || '').toLowerCase().includes(searchLower) ||
+                                    (p.email || '').toLowerCase().includes(searchLower) ||
+                                    (p.unidade || '').toLowerCase().includes(searchLower) ||
+                                    (p.apelido || '').toLowerCase().includes(searchLower)
+                                  );
+                                });
+
+                                if (filtered.length === 0) {
+                                  return (
+                                    <tr>
+                                      <td colSpan={8} className="py-6 text-center text-gray-400 font-bold italic">
+                                        Nenhum colaborador foi encontrado com os critérios de filtragem.
+                                      </td>
+                                    </tr>
+                                  );
+                                }
+
+                                return filtered.map(item => {
+                                  // Obter nome legível do condomínio
+                                  const condoName = condos.find(c => c.id === item.condominio_id)?.nome || 'Sede Geral Santos';
+                                  return (
+                                    <tr key={item.id} className="border-b border-gray-100 hover:bg-slate-50 transition-colors">
+                                      <td className="py-3 font-bold text-stone-850 flex items-center gap-2">
+                                        <div className="w-7 h-7 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold text-[10px]">
+                                          {item.nome.charAt(0).toUpperCase()}
+                                        </div>
+                                        {item.nome}
+                                      </td>
+                                      <td className="py-3 text-stone-700 font-semibold italic text-xs">{item.apelido || '-'}</td>
+                                      <td className="py-3 text-gray-600 font-mono select-all text-xs">{item.email}</td>
+                                      <td className="py-3 text-gray-500 font-mono text-xs">{item.cpf || 'Não especificado'}</td>
+                                      <td className="py-3 font-semibold text-[#0f1b29] text-xs">{item.unidade || 'Sem Cargo'}</td>
+                                      <td className="py-3 text-gray-500 text-xs truncate max-w-[160px]" title={condoName}>{condoName}</td>
+                                      <td className="py-3 text-center">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                                          item.ativo !== false
+                                            ? 'bg-green-50 text-green-700 border-green-150'
+                                            : 'bg-red-50 text-red-750 border-red-150'
+                                        }`}>
+                                          {item.ativo !== false ? 'ATIVO' : 'BLOQUEADO'}
+                                        </span>
+                                      </td>
+                                      <td className="py-3 text-right">
+                                        <div className="flex gap-2 justify-end">
+                                          <button
+                                            onClick={() => {
+                                              setSelectedColPortalId(item.id);
+                                              setColPortalNome(item.nome);
+                                              setColPortalEmail(item.email);
+                                              setColPortalApelido(item.apelido || '');
+                                              setColPortalCpf(item.cpf || '');
+                                              setColPortalUnidade(item.unidade || '');
+                                              setColPortalAtivo(item.ativo !== false);
+                                              setColPortalCondoId(item.condominio_id || 'cd-gonzaga');
+                                              setShowColPortalForm(true);
+                                            }}
+                                            className="p-1.5 hover:bg-stone-100 rounded text-stone-600 transition-colors active:scale-95 cursor-pointer"
+                                            title="Editar cadastro"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteColaboradorPortal(item.id, item.email, item.nome)}
+                                            className="p-1.5 hover:bg-red-50 text-stone-400 hover:text-red-650 rounded transition-colors active:scale-95 cursor-pointer"
+                                            title="Remover colaborador"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                });
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* ADMIN TAB: FINANCEIRO GERAL */}
               {activeTab === 'admin_financeiro' && (

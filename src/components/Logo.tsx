@@ -12,7 +12,7 @@ export default function Logo({ className = "h-11 w-auto", showText = true, light
       <img
         src="https://ejpjtpteycckydrorjpr.supabase.co/storage/v1/object/public/images/facilitieslogoheader.png"
         alt="Facilities Administração de Condomínios"
-        className={className}
+        className={`${className} mix-blend-multiply`}
         referrerPolicy="no-referrer"
       />
     </div>

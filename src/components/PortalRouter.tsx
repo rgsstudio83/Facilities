@@ -15,6 +15,8 @@ export interface UserProfile {
   ativo?: boolean;
   perfil?: string;
   condominio_id?: string;
+  telefone?: string;
+  status_convite?: 'pendente' | 'aceito';
 }
 
 interface PortalRouterContextType {

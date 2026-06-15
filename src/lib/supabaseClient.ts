@@ -312,6 +312,7 @@ CREATE TABLE IF NOT EXISTS perfil (
   whatsapp TEXT,
   ativo BOOLEAN DEFAULT true,
   condominio_id TEXT,
+  status_convite TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -328,6 +329,7 @@ ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS telefone TEXT;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS whatsapp TEXT;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true;
 ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS condominio_id TEXT;
+ALTER TABLE public.perfil ADD COLUMN IF NOT EXISTS status_convite TEXT;
 
 -- 5b. Tabela para os Tipos de Perfis (Roles) para o Admin adicionar, editar e cancelar
 CREATE TABLE IF NOT EXISTS tipos_perfil (
