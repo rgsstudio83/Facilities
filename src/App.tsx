@@ -11,7 +11,18 @@ import {
   Sparkles,
   CheckCircle2,
   Bell,
-  Smartphone
+  Smartphone,
+  Home,
+  Briefcase,
+  Users,
+  Mail,
+  Newspaper,
+  HelpCircle,
+  MapPin,
+  Lock,
+  User,
+  Menu,
+  Laptop
 } from 'lucide-react';
 import Header from './components/Header';
 import DiferenciaisSection from './components/DiferenciaisSection';
@@ -45,6 +56,22 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [authenticatedProfile, setAuthenticatedProfile] = useState<string>('admin');
   const [currentUser, setCurrentUser] = useState<{ name: string; profile: string; unit: string } | null>(null);
+
+  // Layout parameters matching dashboard page styles
+  const [activeSection, setActiveSection] = useState('home');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const publicNavLinks = [
+    { name: 'Página Inicial', id: 'home', icon: <Home className="w-4 h-4" /> },
+    { name: 'Nossos Serviços', id: 'servicos', icon: <Briefcase className="w-4 h-4" /> },
+    { name: 'Metodologia', id: 'como-trabalhamos', icon: <Award className="w-4 h-4" /> },
+    { name: 'Sobre Nós', id: 'sobre-nos', icon: <Users className="w-4 h-4" /> },
+    { name: 'Aplicativo', id: 'app', icon: <Smartphone className="w-4 h-4" /> },
+    { name: 'Cidades Atendidas', id: 'cidades', icon: <MapPin className="w-4 h-4" /> },
+    { name: 'Blog do Síndico', id: 'blog', icon: <Newspaper className="w-4 h-4" /> },
+    { name: 'Central FAQ', id: 'faq', icon: <HelpCircle className="w-4 h-4" /> },
+    { name: 'Contato Comercial', id: 'contato', icon: <Mail className="w-4 h-4" /> },
+  ];
 
   // Sync session profile dynamically with global router auth state
   const currentUserResolved = router.isLoggedIn && router.profile ? {
@@ -104,6 +131,22 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
   // SPA Routing and Local SEO State
   const [currentPath, setCurrentPath] = useState('home'); // #home, #servico/[slug], #local/[slug], #blog, #faq
 
+  const viewType = currentPath.startsWith('servico/') 
+    ? 'servico' 
+    : currentPath.startsWith('local/') 
+    ? 'local' 
+    : currentPath === 'blog' 
+    ? 'blog' 
+    : currentPath === 'faq-seo-section'
+    ? 'faq'
+    : currentPath.startsWith('dashboard')
+    ? 'dashboard'
+    : 'home';
+
+  const viewSlug = (viewType === 'servico' || viewType === 'local') 
+    ? currentPath.split('/')[1] 
+    : '';
+
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash || '#home';
@@ -147,24 +190,99 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
       newHash = '#faq-seo-section';
     }
     window.location.hash = newHash;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Support scrolling in both standard and workspace-scrolled structures
+    const container = document.getElementById('workspace-content-container');
+    if (container) {
+      container.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
-  const viewType = currentPath.startsWith('servico/') 
-    ? 'servico' 
-    : currentPath.startsWith('local/') 
-    ? 'local' 
-    : currentPath === 'blog' 
-    ? 'blog' 
-    : currentPath === 'faq-seo-section'
-    ? 'faq'
-    : currentPath.startsWith('dashboard')
-    ? 'dashboard'
-    : 'home';
+  // Sidebar helpers for global workspace layout parity
+  const isNavLinkActive = (link: any) => {
+    if (viewType === 'blog' && link.id === 'blog') return true;
+    if (viewType === 'faq' && link.id === 'faq') return true;
+    if (viewType === 'servico' && link.id === 'servicos') return true;
+    if (viewType === 'local' && link.id === 'cidades') return true;
+    if (viewType === 'home') {
+      return activeSection === link.id;
+    }
+    return false;
+  };
 
-  const viewSlug = (viewType === 'servico' || viewType === 'local') 
-    ? currentPath.split('/')[1] 
-    : '';
+  const handlePublicNavLinkClick = (link: any) => {
+    if (link.id === 'blog') {
+      handleNavigate('blog');
+    } else if (link.id === 'faq') {
+      handleNavigate('faq');
+    } else {
+      handleNavigate('home');
+      setTimeout(() => {
+        let elementId = link.id;
+        if (link.id === 'cidades') elementId = 'areas-atendidas';
+        if (link.id === 'app') elementId = 'app-facilities';
+        if (elementId === 'home') {
+          const container = document.getElementById('workspace-content-container');
+          if (container) {
+            container.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+          setActiveSection('home');
+        } else {
+          const el = document.getElementById(elementId);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth' });
+            setActiveSection(link.id);
+          }
+        }
+      }, 180);
+    }
+  };
+
+  // Container scroll sync effect for unified page indicators
+  useEffect(() => {
+    const container = document.getElementById('workspace-content-container');
+    const handleScroll = () => {
+      if (viewType === 'home') {
+        const sections = ['home', 'servicos', 'sobre-nos', 'contato', 'app-facilities', 'areas-atendidas', 'faq-seo-section'];
+        const scrollPosition = (container ? container.scrollTop : window.scrollY) + 120;
+
+        for (const section of sections) {
+          const el = document.getElementById(section);
+          if (el) {
+            const top = el.offsetTop;
+            const height = el.offsetHeight;
+            if (scrollPosition >= top && scrollPosition < top + height) {
+              if (section === 'app-facilities') {
+                setActiveSection('app');
+              } else if (section === 'areas-atendidas') {
+                setActiveSection('cidades');
+              } else if (section === 'faq-seo-section') {
+                setActiveSection('faq');
+              } else {
+                setActiveSection(section);
+              }
+              break;
+            }
+          }
+        }
+      }
+    };
+
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+    }
+    window.addEventListener('scroll', handleScroll);
+    return () => {
+      if (container) {
+        container.removeEventListener('scroll', handleScroll);
+      }
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [viewType, currentPath]);
 
   // document metadata dynamic injector for Local SEO 2026 Rankings
   useEffect(() => {
@@ -241,7 +359,7 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
   };
 
   return (
-    <div id="app-root-container" className="min-h-screen bg-background relative overflow-x-hidden font-sans">
+    <div id="app-root-container" className="h-screen w-screen bg-[#070b12] text-sans overflow-hidden flex flex-col justify-stretch">
       {/* Dynamic Floating Notification Toast */}
       {toast && (
         <div
@@ -265,22 +383,221 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
         </div>
       )}
 
-      {/* Corporate Nav Header bar component */}
-      {viewType !== 'dashboard' && (
-        <Header 
-          onOpenPortal={() => setIsPortalOpen(true)} 
-          onOpenQuote={() => setIsQuoteOpen(true)} 
-          onNavigate={handleNavigate}
-          currentViewType={viewType}
-          onOpenAdminDashboard={() => {
-            setIsAdminDashboardOpen(true);
-            window.location.hash = '#dashboard';
-          }}
-        />
-      )}
+      {/* Main Grid Wrapper */}
+      <div id="app-grid-layout" className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-[320px_1fr] h-full w-full">
+        
+        {/* LEFT DYNAMIC SIDEBAR MENU (Premium Dark Theme: #061426) */}
+        {viewType !== 'dashboard' && (
+          <div className="hidden md:flex flex-col h-full bg-[#061426] border-r border-white/5 select-none w-[320px] shrink-0 overflow-y-auto">
+            {/* Top Logo Area with Custom Brand Logo */}
+            <div className="p-6 pb-4 border-b border-white/5 flex items-center justify-center shrink-0">
+              <img 
+                src="https://ejpjtpteycckydrorjpr.supabase.co/storage/v1/object/public/images/facilities%20logobranco.png" 
+                alt="Facilities Condominial" 
+                className="w-full max-h-20 object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
 
-      {/* Main Page Content */}
-      <main className={viewType === 'dashboard' ? '' : 'mt-20'}>
+            {/* Menu Header Category */}
+            <div className="px-6 py-2 pt-5 text-left shrink-0">
+              <span className="text-[10px] text-[#94A3B8] font-bold uppercase tracking-wider font-sans">Menu de Navegação</span>
+            </div>
+
+            {/* Navigation Links */}
+            <nav className="px-3 space-y-1 flex-1">
+              {publicNavLinks.map(link => {
+                const isActive = isNavLinkActive(link);
+                return (
+                  <button
+                    key={link.id}
+                    id={`public-side-menu-${link.id}`}
+                    onClick={() => handlePublicNavLinkClick(link)}
+                    className={`w-full relative overflow-hidden flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold text-left transition-all duration-250 shrink-0 cursor-pointer border-0 ${
+                      isActive 
+                        ? 'bg-[#0E7C66] text-white ring-1 ring-emerald-500/20' 
+                        : 'text-[#94A3B8] hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {isActive && (
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#10B981] rounded-r-md"></div>
+                    )}
+                    <span className={`transition-transform duration-200 ${isActive ? 'scale-110 text-white' : 'text-[#94A3B8]'}`}>
+                      {link.icon}
+                    </span>
+                    <span className="truncate">{link.name}</span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            {/* Connection/Auditoria and Session status area */}
+            <div className="p-4 border-t border-white/5 bg-[#05101F] shrink-0">
+              {router.isLoggedIn && router.profile ? (
+                <div className="space-y-3">
+                  <div className="bg-[#0B1B2F] p-3 rounded-2xl flex items-center gap-2.5">
+                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#10B981] to-[#0E7C66] text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-md">
+                      {router.profile.nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="text-left min-w-0">
+                      <p className="text-white font-extrabold text-xs truncate leading-tight">{router.profile.nome}</p>
+                      <p className="text-[#10B981] text-[9px] font-black uppercase tracking-wider mt-0.5 leading-none">{router.profile.tipo}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsAdminDashboardOpen(true);
+                      const role = router.profile?.tipo || 'morador';
+                      const normalizedRole = role.toLowerCase()
+                        .replace('síndico', 'sindico')
+                        .replace('subsíndico', 'subsindico')
+                        .replace('proprietário', 'proprietario')
+                        .replace('administrador', 'admin')
+                        .trim();
+                      window.location.hash = `#dashboard/${normalizedRole}`;
+                    }}
+                    className="w-full bg-[#0E7C66] hover:bg-[#0c6b58] text-white py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border-0"
+                  >
+                    <Laptop className="w-4 h-4" />
+                    Painel Operacional
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsPortalOpen(true)}
+                  className="w-full bg-[#af101a] hover:bg-[#8f0d14] hover:scale-[1.02] text-white py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border-0"
+                >
+                  <Lock className="w-4 h-4" />
+                  Área do Condômino
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* RIGHT WORKSPACE COLUMN (Main Content Panel) */}
+        <div className={`min-w-0 bg-[#F8FAFC] flex flex-col h-full overflow-hidden ${viewType === 'dashboard' ? 'col-span-2' : ''}`}>
+          
+          {/* Top Sticky White Header (Parity with Dashboard header) */}
+          {viewType !== 'dashboard' && (
+            <header className="h-20 bg-white border-b border-[#E2E8F0] px-6 md:px-8 flex items-center justify-between shrink-0 select-none z-30 shadow-xs relative font-sans">
+              
+              {/* Left Title & Mobile Toggle */}
+              <div className="flex items-center gap-3">
+                {/* Mobile Menu burger button toggle */}
+                <button
+                  id="mobile-nav-toggle"
+                  onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 md:hidden flex items-center justify-center focus:outline-none border-0 bg-transparent cursor-pointer"
+                >
+                  {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                </button>
+
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[10px] text-[#af101a] bg-[#ffdad6] rounded-full px-2 py-0.5 uppercase tracking-wider font-extrabold hidden sm:inline-block">Facilities</span>
+                  <h1 className="text-sm md:text-base font-extrabold font-sans text-[#101c29] uppercase tracking-wide">
+                    {viewType === 'home' ? 'Página Inicial' : 
+                     viewType === 'servico' && viewSlug ? (servicePages.find(item => item.slug === viewSlug)?.title || 'Solução Especializada') :
+                     viewType === 'local' && viewSlug ? (`Facilities ${cityPages.find(item => item.slug === viewSlug)?.cityName || 'Local'}`) :
+                     viewType === 'blog' ? 'Blog do Síndico' :
+                     viewType === 'faq' ? 'Perguntas Frequentes (FAQ)' : 'Painel de Controle'}
+                  </h1>
+                </div>
+              </div>
+
+              {/* Right CTA Links & Buttons */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsQuoteOpen(true)}
+                  className="hidden sm:inline-flex bg-slate-100 hover:bg-slate-200 text-[#101c29] px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border-0"
+                >
+                  Solicitar Cotação
+                </button>
+
+                {router.isLoggedIn && router.profile ? (
+                  <button
+                    onClick={() => {
+                      setIsAdminDashboardOpen(true);
+                      const role = router.profile?.tipo || 'morador';
+                      const normalizedRole = role.toLowerCase()
+                        .replace('síndico', 'sindico')
+                        .replace('subsíndico', 'subsindico')
+                        .replace('proprietário', 'proprietario')
+                        .replace('administrador', 'admin')
+                        .trim();
+                      window.location.hash = `#dashboard/${normalizedRole}`;
+                    }}
+                    className="bg-[#0E7C66] text-white hover:bg-[#0c6b58] px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer border-0"
+                  >
+                    <Laptop className="w-4 h-4 hidden xs:block" />
+                    Painel Operacional
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setIsPortalOpen(true)}
+                    className="bg-[#af101a] text-white hover:bg-[#8f0d14] px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-md transition-all cursor-pointer border-0"
+                  >
+                    <User className="w-4 h-4" />
+                    Área do Condômino
+                  </button>
+                )}
+              </div>
+
+              {/* Mobile slide-down navigation drawer */}
+              {isMobileMenuOpen && (
+                <div id="mobile-sidebar-drawer" className="absolute top-20 left-0 w-full bg-[#061426] border-b border-white/5 shadow-2xl py-4 px-3 flex flex-col gap-2 md:hidden z-50 animate-fade-in text-sans">
+                  {publicNavLinks.map(link => {
+                    const isActive = isNavLinkActive(link);
+                    return (
+                      <button
+                        key={link.id}
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          handlePublicNavLinkClick(link);
+                        }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold text-left transition-colors cursor-pointer border-0 ${
+                          isActive ? 'bg-[#0E7C66] text-white' : 'text-[#94A3B8] hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {link.icon}
+                        {link.name}
+                      </button>
+                    );
+                  })}
+                  
+                  <div className="pt-3 border-t border-white/5 flex gap-2">
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsQuoteOpen(true);
+                      }}
+                      className="flex-1 bg-white/10 hover:bg-white/15 text-white py-2.5 rounded-xl text-xs font-bold text-center border-0 cursor-pointer"
+                    >
+                      Orçamento
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        setIsPortalOpen(true);
+                      }}
+                      className="flex-1 bg-[#af101a] text-white py-2.5 rounded-xl text-xs font-bold text-center border-0 cursor-pointer"
+                    >
+                      Entrar no Portal
+                    </button>
+                  </div>
+                </div>
+              )}
+            </header>
+          )}
+
+          {/* RIGHT VIEWWORKSPACE CONTAINER (Scrollable canvas, matches dashboard interior workspace) */}
+          <div 
+            id="workspace-content-container" 
+            className="flex-1 overflow-y-auto p-0"
+          >
+            {/* Main Page Content */}
+            <main className="p-0">
         
         {/* HOMEPAGE VIEW */}
         {viewType === 'home' && !router.isLoggedIn && (
@@ -625,18 +942,23 @@ function AppContent({ toast, setToast, handleShowToast }: { toast: any; setToast
 
       </main>
 
-      {/* FOOTER component */}
-      {viewType !== 'dashboard' && (
-        <Footer 
-          onOpenPortal={() => setIsPortalOpen(true)} 
-          onNavigate={handleNavigate} 
-          onOpenSupabaseDiag={() => setIsSupabaseDiagOpen(true)}
-          onOpenAdminDashboard={() => {
-            setIsAdminDashboardOpen(true);
-            window.location.hash = '#dashboard';
-          }}
-        />
-      )}
+            {/* FOOTER component listed directly under the workspace scroll list */}
+            {viewType !== 'dashboard' && (
+              <Footer 
+                onOpenPortal={() => setIsPortalOpen(true)} 
+                onNavigate={handleNavigate} 
+                onOpenSupabaseDiag={() => setIsSupabaseDiagOpen(true)}
+                onOpenAdminDashboard={() => {
+                  setIsAdminDashboardOpen(true);
+                  window.location.hash = '#dashboard';
+                }}
+              />
+            )}
+          </div>
+
+        </div>
+
+      </div>
 
       {/* PROPOSAL INQUIRY STEP FLOW MODAL */}
       <QuoteModal

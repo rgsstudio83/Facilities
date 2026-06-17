@@ -432,6 +432,291 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [detailedCondo, setDetailedCondo] = useState<any | null>(null);
   const [editingCondo, setEditingCondo] = useState<any | null>(null);
 
+  // Estados adicionais para gerenciamento de Blocos e Unidades do Condomínio
+  const [detailedCondoForBlocksAndUnits, setDetailedCondoForBlocksAndUnits] = useState<any | null>(null);
+  const [blocosListSec, setBlocosListSec] = useState<{ id: string; condominio_id: string; nome: string }[]>([]);
+  const [unidadesListSec, setUnidadesListSec] = useState<{ id: string; bloco_id: string; numero: string; andar?: number; fracao_ideal?: number }[]>([]);
+  const [loadingBlocosUnidades, setLoadingBlocosUnidades] = useState(false);
+  const [selectedBlockIdForUnit, setSelectedBlockIdForUnit] = useState<string>('');
+  const [newBlockName, setNewBlockName] = useState('');
+  const [newUnitNumber, setNewUnitNumber] = useState('');
+  const [newUnitFloor, setNewUnitFloor] = useState<string>('');
+  const [newUnitFracao, setNewUnitFracao] = useState<string>('0.0125');
+  const [generateUnitBlockId, setGenerateUnitBlockId] = useState('');
+  const [generateFloorsCount, setGenerateFloorsCount] = useState<number>(5);
+  const [generateUnitsPerFloor, setGenerateUnitsPerFloor] = useState<number>(4);
+  const [generateFormat, setGenerateFormat] = useState<'standard' | 'floorPrefix'>('floorPrefix');
+
+  const fetchBlocosAndUnidades = async (condoId: string) => {
+    setLoadingBlocosUnidades(true);
+    let loadedBlocos: any[] = [];
+    let loadedUnidades: any[] = [];
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: dbBlocos, error: errBlocos } = await supabase
+          .from('blocos')
+          .select('*')
+          .eq('condominio_id', condoId)
+          .order('nome', { ascending: true });
+
+        if (!errBlocos && dbBlocos) {
+          loadedBlocos = dbBlocos;
+          if (dbBlocos.length > 0) {
+            const blockIds = dbBlocos.map((b: any) => b.id);
+            const { data: dbUnidades, error: errUnidades } = await supabase
+              .from('unidades')
+              .select('*')
+              .in('bloco_id', blockIds)
+              .order('numero', { ascending: true });
+            
+            if (!errUnidades && dbUnidades) {
+              loadedUnidades = dbUnidades;
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error('Erro ao buscar do Supabase:', err);
+      }
+    }
+
+    const localBlocos = localStorage.getItem(`facilities_condo_blocos_${condoId}`);
+    const localUnidades = localStorage.getItem(`facilities_condo_unidades_${condoId}`);
+
+    if (loadedBlocos.length === 0 && localBlocos) {
+      try {
+        loadedBlocos = JSON.parse(localBlocos);
+      } catch {}
+    }
+    if (loadedUnidades.length === 0 && localUnidades) {
+      try {
+        loadedUnidades = JSON.parse(localUnidades);
+      } catch {}
+    }
+
+    // Inicialização padrão caso vazio
+    if (loadedBlocos.length === 0) {
+      loadedBlocos = [
+        { id: `b-a-${condoId}`, condominio_id: condoId, nome: 'Bloco A' },
+        { id: `b-b-${condoId}`, condominio_id: condoId, nome: 'Bloco B' }
+      ];
+      localStorage.setItem(`facilities_condo_blocos_${condoId}`, JSON.stringify(loadedBlocos));
+    }
+    if (loadedUnidades.length === 0 && loadedBlocos.length > 0) {
+      loadedUnidades = [
+        { id: `u-11-${condoId}`, bloco_id: loadedBlocos[0].id, numero: '101', andar: 1, fracao_ideal: 0.0125 },
+        { id: `u-12-${condoId}`, bloco_id: loadedBlocos[0].id, numero: '102', andar: 1, fracao_ideal: 0.0125 },
+        { id: `u-21-${condoId}`, bloco_id: loadedBlocos[0].id, numero: '201', andar: 2, fracao_ideal: 0.0125 },
+        { id: `u-22-${condoId}`, bloco_id: loadedBlocos[0].id, numero: '202', andar: 2, fracao_ideal: 0.0125 },
+        { id: `u-101-${condoId}`, bloco_id: loadedBlocos[1].id, numero: '101', andar: 1, fracao_ideal: 0.025 },
+        { id: `u-102-${condoId}`, bloco_id: loadedBlocos[1].id, numero: '102', andar: 1, fracao_ideal: 0.025 }
+      ];
+      localStorage.setItem(`facilities_condo_unidades_${condoId}`, JSON.stringify(loadedUnidades));
+    }
+
+    setBlocosListSec(loadedBlocos);
+    setUnidadesListSec(loadedUnidades);
+    if (loadedBlocos.length > 0) {
+      setSelectedBlockIdForUnit(loadedBlocos[0].id);
+      setGenerateUnitBlockId(loadedBlocos[0].id);
+    }
+    setLoadingBlocosUnidades(false);
+  };
+
+  useEffect(() => {
+    if (detailedCondoForBlocksAndUnits) {
+      fetchBlocosAndUnidades(detailedCondoForBlocksAndUnits.id);
+    }
+  }, [detailedCondoForBlocksAndUnits]);
+
+  const handleAddBlock = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newBlockName.trim() || !detailedCondoForBlocksAndUnits) return;
+
+    const condoId = detailedCondoForBlocksAndUnits.id;
+    const newBlockId = `b-${Date.now()}`;
+    const newBlock = {
+      id: newBlockId,
+      condominio_id: condoId,
+      nome: newBlockName.trim()
+    };
+
+    const updatedBlocos = [...blocosListSec, newBlock];
+    setBlocosListSec(updatedBlocos);
+    localStorage.setItem(`facilities_condo_blocos_${condoId}`, JSON.stringify(updatedBlocos));
+    setNewBlockName('');
+    if (!selectedBlockIdForUnit) setSelectedBlockIdForUnit(newBlockId);
+    if (!generateUnitBlockId) setGenerateUnitBlockId(newBlockId);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('blocos').insert([{
+          id: newBlockId,
+          condominio_id: condoId,
+          nome: newBlock.nome
+        }]);
+      } catch (err: any) {
+        console.error('Erro ao salvar bloco no Supabase:', err);
+      }
+    }
+
+    addAuditLog('CRIAR', 'blocos', `Cadastrado bloco "${newBlock.nome}" para condomínio ID: ${condoId}`);
+    onShowNotification('Sucesso', 'Bloco cadastrado com sucesso!');
+  };
+
+  const handleDeleteBlock = async (blockId: string, blockName: string) => {
+    if (!detailedCondoForBlocksAndUnits) return;
+    if (!confirm(`Deseja realmente excluir o "${blockName}"? Todas as unidades desse bloco também serão excluídas!`)) return;
+
+    const condoId = detailedCondoForBlocksAndUnits.id;
+    const updatedBlocos = blocosListSec.filter(b => b.id !== blockId);
+    const updatedUnidades = unidadesListSec.filter(u => u.bloco_id !== blockId);
+
+    setBlocosListSec(updatedBlocos);
+    setUnidadesListSec(updatedUnidades);
+
+    localStorage.setItem(`facilities_condo_blocos_${condoId}`, JSON.stringify(updatedBlocos));
+    localStorage.setItem(`facilities_condo_unidades_${condoId}`, JSON.stringify(updatedUnidades));
+
+    if (selectedBlockIdForUnit === blockId && updatedBlocos.length > 0) {
+      setSelectedBlockIdForUnit(updatedBlocos[0].id);
+    }
+    if (generateUnitBlockId === blockId && updatedBlocos.length > 0) {
+      setGenerateUnitBlockId(updatedBlocos[0].id);
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('blocos').delete().eq('id', blockId);
+      } catch (err: any) {
+        console.error('Erro ao deletar bloco no Supabase:', err);
+      }
+    }
+
+    addAuditLog('EXCLUIR', 'blocos', `Excluído bloco "${blockName}" do condomínio ID: ${condoId}`);
+    onShowNotification('Sucesso', 'Bloco e suas unidades correspondentes excluídos!');
+  };
+
+  const handleAddUnit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!newUnitNumber.trim() || !selectedBlockIdForUnit || !detailedCondoForBlocksAndUnits) return;
+
+    const condoId = detailedCondoForBlocksAndUnits.id;
+    const newUnitId = `u-${Date.now()}`;
+    const newUnitObj = {
+      id: newUnitId,
+      bloco_id: selectedBlockIdForUnit,
+      numero: newUnitNumber.trim(),
+      andar: newUnitFloor ? Number(newUnitFloor) : undefined,
+      fracao_ideal: newUnitFracao ? Number(newUnitFracao) : undefined
+    };
+
+    const exists = unidadesListSec.some(u => u.bloco_id === selectedBlockIdForUnit && u.numero === newUnitNumber.trim());
+    if (exists) {
+      onShowNotification('Erro', `A unidade ${newUnitNumber} já está cadastrada para o bloco selecionado.`);
+      return;
+    }
+
+    const updatedUnidades = [...unidadesListSec, newUnitObj];
+    setUnidadesListSec(updatedUnidades);
+    localStorage.setItem(`facilities_condo_unidades_${condoId}`, JSON.stringify(updatedUnidades));
+
+    setNewUnitNumber('');
+    setNewUnitFloor('');
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('unidades').insert([{
+          id: newUnitId,
+          bloco_id: selectedBlockIdForUnit,
+          numero: newUnitObj.numero,
+          andar: newUnitObj.andar,
+          fracao_ideal: newUnitObj.fracao_ideal
+        }]);
+      } catch (err: any) {
+        console.error('Erro ao salvar unidade no Supabase:', err);
+      }
+    }
+
+    addAuditLog('CRIAR', 'unidades', `Unidade ${newUnitObj.numero} criada para bloco ID: ${selectedBlockIdForUnit}`);
+    onShowNotification('Sucesso', `Unidade ${newUnitObj.numero} criada com sucesso!`);
+  };
+
+  const handleDeleteUnit = async (unitId: string, unitNumber: string) => {
+    if (!detailedCondoForBlocksAndUnits) return;
+    
+    const condoId = detailedCondoForBlocksAndUnits.id;
+    const updatedUnidades = unidadesListSec.filter(u => u.id !== unitId);
+    setUnidadesListSec(updatedUnidades);
+    localStorage.setItem(`facilities_condo_unidades_${condoId}`, JSON.stringify(updatedUnidades));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('unidades').delete().eq('id', unitId);
+      } catch (err: any) {
+        console.error('Erro ao deletar unidade no Supabase:', err);
+      }
+    }
+
+    onShowNotification('Sucesso', `Unidade "${unitNumber}" removida com sucesso!`);
+  };
+
+  const handleAutoGenerateUnits = async () => {
+    if (!generateUnitBlockId || !detailedCondoForBlocksAndUnits) return;
+    
+    const condoId = detailedCondoForBlocksAndUnits.id;
+    const newlyGenerated: any[] = [];
+    
+    for (let f = 1; f <= generateFloorsCount; f++) {
+      for (let u = 1; u <= generateUnitsPerFloor; u++) {
+        let unitNum = '';
+        if (generateFormat === 'floorPrefix') {
+          unitNum = `${f}${u.toString().padStart(2, '0')}`;
+        } else {
+          unitNum = `${f}${u}`;
+        }
+
+        const isDuplicate = unidadesListSec.some(existUnit => existUnit.bloco_id === generateUnitBlockId && existUnit.numero === unitNum);
+        if (!isDuplicate) {
+          newlyGenerated.push({
+            id: `u-gen-${generateUnitBlockId}-${f}-${u}-${Date.now()}`,
+            bloco_id: generateUnitBlockId,
+            numero: unitNum,
+            andar: f,
+            fracao_ideal: parseFloat((1 / (generateFloorsCount * generateUnitsPerFloor)).toFixed(6))
+          });
+        }
+      }
+    }
+
+    if (newlyGenerated.length === 0) {
+      onShowNotification('Alerta', 'Todas as possíveis unidades para esta estrutura já existem.');
+      return;
+    }
+
+    const updatedUnidades = [...unidadesListSec, ...newlyGenerated];
+    setUnidadesListSec(updatedUnidades);
+    localStorage.setItem(`facilities_condo_unidades_${condoId}`, JSON.stringify(updatedUnidades));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const insertData = newlyGenerated.map(item => ({
+          id: item.id,
+          bloco_id: item.bloco_id,
+          numero: item.numero,
+          andar: item.andar,
+          fracao_ideal: item.fracao_ideal
+        }));
+        await supabase.from('unidades').insert(insertData);
+      } catch (err: any) {
+        console.error('Erro ao salvar lote de unidades no Supabase:', err);
+      }
+    }
+
+    addAuditLog('CRIAR', 'unidades', `Gerado lote de ${newlyGenerated.length} unidades para bloco ID: ${generateUnitBlockId}`);
+    onShowNotification('Sucesso', `Gerado com sucesso um lote de ${newlyGenerated.length} unidades!`);
+  };
+
   // Edit form model states
   const [editCondoName, setEditCondoName] = useState('');
   const [editCondoCnpj, setEditCondoCnpj] = useState('');
@@ -701,6 +986,7 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
   const [colPortalAtivo, setColPortalAtivo] = useState(true);
   const [colPortalCondoId, setColPortalCondoId] = useState('cd-gonzaga');
   const [colPortalSearch, setColPortalSearch] = useState('');
+  const [colPortalFiltroOrigem, setColPortalFiltroOrigem] = useState<'todos' | 'admin'>('todos');
 
   const handleCreateOrUpdateColaboradorPortal = async (e: FormEvent) => {
     e.preventDefault();
@@ -806,7 +1092,8 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
       perfil: resolvedPerfil,
       ativo: colPortalAtivo,
       condominio_id: colPortalCondoId,
-      apelido: colPortalApelido.trim()
+      apelido: colPortalApelido.trim(),
+      cadastrado_por: 'Administrador'
     };
 
     // Update Supabase se configurado
@@ -821,7 +1108,8 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
           unidade: colPortalUnidade || 'Suporte Facilities',
           ativo: colPortalAtivo,
           condominio_id: colPortalCondoId,
-          apelido: colPortalApelido.trim()
+          apelido: colPortalApelido.trim(),
+          cadastrado_por: 'Administrador'
         });
       } catch (err: any) {
         console.error('Erro ao salvar no Supabase:', err.message);
@@ -3139,15 +3427,26 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
 
                           {/* Modal Footer */}
                           <div className="p-6 border-t border-gray-100 bg-gray-50 flex flex-wrap justify-between items-center gap-3">
-                            <button
-                              onClick={() => {
-                                setDetailedCondo(null);
-                                startEditingCondo(detailedCondo);
-                              }}
-                              className="px-4 py-2 bg-white border border-gray-250 hover:bg-gray-100 text-[#101c29] text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
-                            >
-                              <Edit2 className="w-3.5 h-3.5 text-[#af101a]" /> Editar Informações
-                            </button>
+                            <div className="flex gap-2 flex-wrap">
+                              <button
+                                onClick={() => {
+                                  setDetailedCondo(null);
+                                  startEditingCondo(detailedCondo);
+                                }}
+                                className="px-4 py-2 bg-white border border-gray-250 hover:bg-gray-100 text-[#101c29] text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-[#af101a]" /> Editar Informações
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setDetailedCondoForBlocksAndUnits(detailedCondo);
+                                }}
+                                className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-800 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                              >
+                                <Plus className="w-3.5 h-3.5 text-emerald-700" /> Configurar Blocos & Unidades
+                              </button>
+                            </div>
 
                             <div className="flex gap-2">
                               <button
@@ -3394,6 +3693,378 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                         </div>
                       </div>
                     )}
+
+                    {detailedCondoForBlocksAndUnits && (
+                      <div id="modal-blocos-unidades-condo" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-fade-in text-sans">
+                        <div className="bg-white w-full max-w-6xl rounded-[28px] shadow-[0_24px_60px_-15px_rgba(0,0,0,0.35)] border border-gray-100 overflow-hidden flex flex-col max-h-[92vh]">
+                          {/* Modal Header */}
+                          <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <div>
+                              <h4 className="text-xs font-extrabold text-[#101c29] uppercase tracking-wider flex items-center gap-2">
+                                <Building2 className="w-4 h-4 text-[#af101a]" /> Estrutura de Blocos & Unidades
+                              </h4>
+                              <p className="text-[10px] text-gray-400 font-bold mt-0.5">Condomínio Selecionado: <span className="text-[#af101a]">{detailedCondoForBlocksAndUnits.nome}</span></p>
+                            </div>
+                            <button
+                              onClick={() => setDetailedCondoForBlocksAndUnits(null)}
+                              className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-full transition-colors cursor-pointer border-0 bg-transparent"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          {/* Modal Body */}
+                          <div className="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0 text-left">
+                            {/* Coluna Esquerda: Cadastro de Blocos / Lotes / Unidades */}
+                            <div className="w-full lg:w-[45%] border-r border-gray-100 p-6 overflow-y-auto space-y-6">
+                              
+                              {/* 1. Cadastrar Bloco */}
+                              <div className="bg-slate-50/60 p-4 rounded-2xl border border-gray-100 space-y-3">
+                                <h5 className="text-[10px] font-extrabold text-[#101c29] uppercase tracking-wide flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#af101a]"></span> 1. Registrar Bloco do Condomínio
+                                </h5>
+                                <form onSubmit={handleAddBlock} className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Nome do Bloco (ex: Torre 1, Bloco B)"
+                                    value={newBlockName}
+                                    onChange={(e) => setNewBlockName(e.target.value)}
+                                    className="flex-1 bg-white border border-gray-250 px-3 py-2 rounded-lg text-xs outline-none focus:border-emerald-500 text-[#101c29] font-bold"
+                                  />
+                                  <button
+                                    type="submit"
+                                    className="px-4 py-2 bg-[#101c29] hover:bg-stone-850 text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1 border-0"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" /> Adicionar
+                                  </button>
+                                </form>
+
+                                {/* List of blocks already created */}
+                                {blocosListSec.length > 0 && (
+                                  <div className="pt-2">
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-1.5">Blocos Ativos:</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {blocosListSec.map(block => {
+                                        const count = unidadesListSec.filter(u => u.bloco_id === block.id).length;
+                                        return (
+                                          <div key={block.id} className="flex items-center gap-1 bg-white border border-gray-200 pl-2.5 pr-1.5 py-1 rounded-lg shadow-2xs">
+                                            <span className="text-[10.5px] font-extrabold text-[#101c29]">{block.nome}</span>
+                                            <span className="text-[8px] bg-gray-100 text-gray-500 px-1 py-0.5 rounded font-black">{count} un</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDeleteBlock(block.id, block.nome)}
+                                              className="text-gray-400 hover:text-[#af101a] p-0.5 rounded cursor-pointer border-0 bg-transparent"
+                                              title="Excluir Bloco"
+                                            >
+                                              <Trash2 className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 2. Cadastrar Unidade Individual */}
+                              <div className="bg-slate-50/60 p-4 rounded-2xl border border-gray-100 space-y-3">
+                                <h5 className="text-[10px] font-extrabold text-[#101c29] uppercase tracking-wide flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> 2. Cadastrar Unidade Individual
+                                </h5>
+                                {blocosListSec.length === 0 ? (
+                                  <p className="text-[10px] text-gray-400 font-bold italic">Cadastre ao menos um bloco primeiro.</p>
+                                ) : (
+                                  <form onSubmit={handleAddUnit} className="space-y-2.5 text-left">
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div className="space-y-1">
+                                        <label className="text-[9px] font-extrabold text-gray-400 uppercase">Bloco Destino</label>
+                                        <select
+                                          value={selectedBlockIdForUnit}
+                                          onChange={(e) => setSelectedBlockIdForUnit(e.target.value)}
+                                          className="w-full bg-white border border-gray-250 p-2 rounded-lg text-xs font-bold text-[#101c29] outline-none"
+                                        >
+                                          {blocosListSec.map(b => (
+                                            <option key={b.id} value={b.id}>{b.nome}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="text-[9px] font-extrabold text-gray-400 uppercase">Nº da Unidade *</label>
+                                        <input
+                                          type="text"
+                                          placeholder="Ex: 101, 12, Apto 5"
+                                          value={newUnitNumber}
+                                          onChange={(e) => setNewUnitNumber(e.target.value)}
+                                          className="w-full bg-white border border-[#af101a]/15 p-2 rounded-lg text-xs font-bold text-[#101c29] outline-none"
+                                          required
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 text-left">
+                                      <div className="space-y-1">
+                                        <label className="text-[9px] font-extrabold text-gray-400 uppercase">Andar (Opcional)</label>
+                                        <input
+                                          type="number"
+                                          placeholder="Ex: 1, 10"
+                                          value={newUnitFloor}
+                                          onChange={(e) => setNewUnitFloor(e.target.value)}
+                                          className="w-full bg-white border border-gray-250 p-2 rounded-lg text-xs font-bold text-[#101c29] outline-none"
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <label className="text-[9px] font-extrabold text-gray-400 uppercase">Fração Ideal</label>
+                                        <input
+                                          type="text"
+                                          value={newUnitFracao}
+                                          onChange={(e) => setNewUnitFracao(e.target.value)}
+                                          placeholder="0.0125"
+                                          className="w-full bg-white border border-gray-250 p-2 rounded-lg text-xs font-bold text-[#101c29] outline-none font-mono"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      type="submit"
+                                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-colors border-0"
+                                    >
+                                      <PlusCircle className="w-3.5 h-3.5" /> Adicionar Unidade
+                                    </button>
+                                  </form>
+                                )}
+                              </div>
+
+                              {/* 3. Gerador Automático de Estrutura */}
+                              <div className="bg-amber-50/35 p-4 rounded-2xl border border-amber-200/55 space-y-3">
+                                <div className="flex justify-between items-start">
+                                  <h5 className="text-[10px] font-extrabold text-[#9c510e] uppercase tracking-wide flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> 3. Autogerador de Estrutura Rápida
+                                  </h5>
+                                  <span className="bg-amber-100 text-[#9c510e] font-sans text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
+                                    Recomendado 🚀
+                                  </span>
+                                </div>
+                                {blocosListSec.length === 0 ? (
+                                  <p className="text-[10px] text-gray-400 font-bold italic">Cadastre ao menos um bloco primeiro.</p>
+                                ) : (
+                                  <div className="space-y-3 text-xs leading-normal">
+                                    <p className="text-[10px] text-stone-600 font-semibold leading-relaxed">
+                                      Crie dezenas de unidades organizadas por andar em apenas um clique! Ideal para empreendimentos com andares padronizados.
+                                    </p>
+
+                                    <div className="space-y-2 text-left">
+                                      <div className="space-y-1">
+                                        <label className="text-[9px] font-extrabold text-amber-800 uppercase">Bloco para Aplicar Gerador</label>
+                                        <select
+                                          value={generateUnitBlockId}
+                                          onChange={(e) => setGenerateUnitBlockId(e.target.value)}
+                                          className="w-full bg-white border border-amber-200/70 p-2 rounded-lg text-xs font-bold text-[#101c29] outline-none"
+                                        >
+                                          {blocosListSec.map(b => (
+                                            <option key={b.id} value={b.id}>{b.nome}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-2 text-left">
+                                        <div className="space-y-1">
+                                          <label className="text-[9px] font-extrabold text-amber-800 uppercase">Qtd de Andares</label>
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            max="30"
+                                            value={generateFloorsCount}
+                                            onChange={(e) => setGenerateFloorsCount(Math.max(1, Number(e.target.value)))}
+                                            className="w-full bg-white border border-amber-200/70 p-2 rounded-lg text-xs font-bold text-[#101c29] outline-none"
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <label className="text-[9px] font-extrabold text-amber-800 uppercase">Unidades por Andar</label>
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            max="12"
+                                            value={generateUnitsPerFloor}
+                                            onChange={(e) => setGenerateUnitsPerFloor(Math.max(1, Number(e.target.value)))}
+                                            className="w-full bg-white border border-amber-200/70 p-2 rounded-lg text-xs font-bold text-[#101c29] outline-none"
+                                          />
+                                        </div>
+                                      </div>
+
+                                      <div className="space-y-1">
+                                        <label className="text-[9px] font-extrabold text-amber-800 uppercase">Padrão de Numeração</label>
+                                        <div className="grid grid-cols-2 gap-2 mt-1">
+                                          <label className="flex items-center gap-2 p-2 bg-white border border-amber-200/50 rounded-lg cursor-pointer hover:bg-amber-50/20">
+                                            <input
+                                              type="radio"
+                                              name="generateFormat"
+                                              checked={generateFormat === 'floorPrefix'}
+                                              onChange={() => setGenerateFormat('floorPrefix')}
+                                              className="text-amber-600 focus:ring-amber-500 cursor-pointer"
+                                            />
+                                            <span className="text-[10px] font-bold text-gray-700">101, 102, 201...</span>
+                                          </label>
+                                          <label className="flex items-center gap-2 p-2 bg-white border border-amber-200/50 rounded-lg cursor-pointer hover:bg-amber-50/20">
+                                            <input
+                                              type="radio"
+                                              name="generateFormat"
+                                              checked={generateFormat === 'standard'}
+                                              onChange={() => setGenerateFormat('standard')}
+                                              className="text-amber-600 focus:ring-amber-500 cursor-pointer"
+                                            />
+                                            <span className="text-[10px] font-bold text-gray-700">11, 12, 21, 22...</span>
+                                          </label>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={handleAutoGenerateUnits}
+                                      className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-colors border-0"
+                                    >
+                                      ⚡ Auto-Gerar Todas Unidades
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Coluna Direita: Visualizador Gráfico e Lista Completa */}
+                            <div className="w-full lg:w-[55%] p-6 bg-slate-50/50 flex flex-col overflow-y-auto space-y-5 min-h-0">
+                              <div className="flex justify-between items-center flex-wrap gap-2">
+                                <div>
+                                  <h5 className="text-[11px] font-black text-[#101c29] uppercase tracking-wider flex items-center gap-2">
+                                    <Compass className="w-4 h-4 text-[#af101a]" /> Vista Arquitetônica (Mapa do Edifício)
+                                  </h5>
+                                  <p className="text-[9px] text-gray-400 font-bold mt-0.5 font-sans">Selecione o bloco desejado para visualizar e gerenciar as respectivas unidades autônomas por andar.</p>
+                                </div>
+                              </div>
+
+                              {/* Tabs de Seleção de Bloco para Focar Visualizador */}
+                              {blocosListSec.length === 0 ? (
+                                <div className="bg-white p-6 rounded-2xl border border-gray-150 text-center text-gray-400 text-xs font-bold">
+                                  Cadastre ao menos um bloco para habilitar o painel visual de pavimentos.
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex gap-2.5 overflow-x-auto pb-1">
+                                    {blocosListSec.map(b => (
+                                      <button
+                                        key={b.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedBlockIdForUnit(b.id);
+                                          setGenerateUnitBlockId(b.id);
+                                        }}
+                                        className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 border-0 ${
+                                          selectedBlockIdForUnit === b.id
+                                            ? 'bg-[#101c29] text-white shadow-md shadow-slate-900/15'
+                                            : 'bg-white border border-gray-250 text-gray-600 hover:text-gray-900'
+                                        }`}
+                                      >
+                                        <Building2 className="w-3.5 h-3.5" />
+                                        {b.nome}
+                                      </button>
+                                    ))}
+                                  </div>
+
+                                  {/* Render Visual Matrix (Descending building Floors) */}
+                                  <div className="bg-white border border-gray-150 p-5 rounded-2xl space-y-4 shadow-2xs max-h-[460px] overflow-y-auto">
+                                    <div className="flex items-center justify-between border-b pb-2">
+                                      <span className="text-[10px] font-extrabold text-[#101c29] uppercase">Pavimentos & Unidades</span>
+                                      <span className="text-[9px] text-gray-400 font-bold">Unidades no Bloco: <span className="font-extrabold text-[#af101a]">{unidadesListSec.filter(u => u.bloco_id === selectedBlockIdForUnit).length}</span></span>
+                                    </div>
+
+                                    {(() => {
+                                      const groupedUnitsByFloor = unidadesListSec
+                                        .filter(u => u.bloco_id === selectedBlockIdForUnit)
+                                        .reduce((acc: { [key: number]: typeof unidadesListSec }, unit) => {
+                                          const floor = unit.andar || 0;
+                                          if (!acc[floor]) acc[floor] = [];
+                                          acc[floor].push(unit);
+                                          return acc;
+                                        }, {});
+
+                                      const sortedFloors = Object.keys(groupedUnitsByFloor)
+                                        .map(Number)
+                                        .sort((a, b) => b - a);
+
+                                      return (
+                                        <div className="space-y-3">
+                                          {sortedFloors.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center py-12 text-center text-gray-400">
+                                              <Building2 className="w-10 h-10 stroke-1 mb-2 text-gray-300" />
+                                              <p className="text-xs font-bold">Nenhuma unidade cadastrada neste bloco.</p>
+                                              <p className="text-[10px] font-sans">Crie unidades no formulário ao lado ou utilize o gerador automático por andares acima.</p>
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-2.5">
+                                              {sortedFloors.map((floor) => {
+                                                const floorUnits = groupedUnitsByFloor[floor].sort((a, b) => a.numero.localeCompare(b.numero, undefined, { numeric: true }));
+                                                return (
+                                                  <div key={floor} className="flex items-center gap-3 bg-slate-50/50 p-2.5 rounded-xl border border-gray-150/50 hover:bg-slate-50 transition-all text-left">
+                                                    <div className="w-16 shrink-0 text-right pr-2 border-r border-stone-200 font-mono text-[9px] uppercase font-extrabold text-gray-500">
+                                                      {floor === 0 ? 'Térreo' : `${floor}º Andar`}
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2 flex-1">
+                                                      {floorUnits.map((unit) => (
+                                                        <div 
+                                                          key={unit.id} 
+                                                          className="group relative bg-white border border-gray-150 hover:border-[#af101a]/40 pl-3 pr-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-2xs hover:shadow-xs text-xs"
+                                                        >
+                                                          <span className="font-extrabold text-[#101c29]">{unit.numero}</span>
+                                                          {unit.fracao_ideal && (
+                                                            <span className="text-[8px] md:text-[9px] text-[#52647c] font-black tracking-tighter" title="Fração Ideal">({unit.fracao_ideal})</span>
+                                                          )}
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteUnit(unit.id, unit.numero)}
+                                                            className="text-gray-400 hover:text-[#af101a] p-0.5 rounded transition-all cursor-pointer border-0 bg-transparent"
+                                                            title="Remover Unidade"
+                                                          >
+                                                            <X className="w-3 h-3" />
+                                                          </button>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Modal Footer */}
+                          <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end">
+                            <button
+                              onClick={() => {
+                                setDetailedCondoForBlocksAndUnits(null);
+                                if (detailedCondo) {
+                                  const localUnitsCount = unidadesListSec.length;
+                                  const localBlocosCount = blocosListSec.length;
+                                  setDetailedCondo(prev => ({
+                                    ...prev,
+                                    unidades: localUnitsCount > 0 ? localUnitsCount : prev.unidades,
+                                    blocosCount: localBlocosCount > 0 ? localBlocosCount : prev.blocosCount
+                                  }));
+                                }
+                              }}
+                              className="px-6 py-2.5 bg-[#101c29] text-white text-xs font-bold rounded-lg hover:bg-stone-850 transition-colors cursor-pointer border-0"
+                            >
+                              Concluir e Salvar Estrutura
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -3615,17 +4286,45 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                             <p className="text-[10px] text-gray-400 font-bold">Gerencie ou adicione perfis de colaboradores. Por segurança, o perfil de acesso é rigidamente definido como "Colaborador".</p>
                           </div>
                           
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                              <Search className="w-3.5 h-3.5 text-gray-400" />
-                            </span>
-                            <input
-                              type="text"
-                              value={colPortalSearch}
-                              onChange={(e) => setColPortalSearch(e.target.value)}
-                              placeholder="Filtrar colaboradores..."
-                              className="pl-9 pr-4 py-1.5 bg-[#f1f4f8] text-xs outline-none rounded-lg font-bold text-[#101c29] border border-transparent focus:border-stone-200"
-                            />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {/* Filtro por Origem de Cadastro */}
+                            <div className="flex bg-[#f1f4f8] p-1 rounded-lg border border-gray-100">
+                              <button
+                                type="button"
+                                onClick={() => setColPortalFiltroOrigem('todos')}
+                                        className={`px-3 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                                  colPortalFiltroOrigem === 'todos'
+                                    ? 'bg-white text-[#af101a] shadow-sm'
+                                    : 'text-[#5f5e5e] hover:text-gray-900 font-bold'
+                                }`}
+                              >
+                                Todos
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setColPortalFiltroOrigem('admin')}
+                                        className={`px-3 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                                  colPortalFiltroOrigem === 'admin'
+                                    ? 'bg-white text-[#af101a] shadow-sm'
+                                    : 'text-[#5f5e5e] hover:text-gray-900 font-bold'
+                                }`}
+                              >
+                                Cadastrados por Admin
+                              </button>
+                            </div>
+
+                            <div className="relative">
+                              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                <Search className="w-3.5 h-3.5 text-gray-400" />
+                              </span>
+                              <input
+                                type="text"
+                                value={colPortalSearch}
+                                onChange={(e) => setColPortalSearch(e.target.value)}
+                                placeholder="Filtrar colaboradores..."
+                                className="pl-9 pr-4 py-1.5 bg-[#f1f4f8] text-xs outline-none rounded-lg font-bold text-[#101c29] border border-transparent focus:border-stone-200"
+                              />
+                            </div>
                           </div>
                         </div>
 
@@ -3669,7 +4368,8 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                                         unidade: p.unidade || p.unit,
                                         ativo: p.ativo !== false,
                                         condominio_id: p.condominio_id,
-                                        apelido: p.apelido || ''
+                                        apelido: p.apelido || '',
+                                        cadastrado_por: p.cadastrado_por || 'Administrador'
                                       });
                                     }
                                   }
@@ -3688,13 +4388,19 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                                         unidade: u.unit,
                                         ativo: u.ativo !== false,
                                         condominio_id: u.condominio_id,
-                                        apelido: u.apelido || ''
+                                        apelido: u.apelido || '',
+                                        cadastrado_por: u.cadastrado_por || 'Administrador'
                                       });
                                     }
                                   }
                                 });
 
                                 const filtered = colabs.filter(p => {
+                                  if (colPortalFiltroOrigem === 'admin') {
+                                    return p.cadastrado_por === 'Administrador' || p.cadastrado_por === 'admin' || !p.cadastrado_por;
+                                  }
+                                  return true;
+                                }).filter(p => {
                                   if (!colPortalSearch.trim()) return true;
                                   const searchLower = colPortalSearch.toLowerCase();
                                   return (
@@ -3724,7 +4430,14 @@ export default function PortalModal({ isOpen, onClose, onShowNotification, onLog
                                         <div className="w-7 h-7 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold text-[10px]">
                                           {item.nome.charAt(0).toUpperCase()}
                                         </div>
-                                        {item.nome}
+                                        <div className="flex flex-col items-start gap-0.5">
+                                          <span className="text-stone-850 font-bold">{item.nome}</span>
+                                          {(item.cadastrado_por === 'Administrador' || item.cadastrado_por === 'admin' || !item.cadastrado_por) && (
+                                            <span className="bg-red-50 text-[#af101a] border border-red-150 text-[8px] px-1.5 py-0.5 rounded font-extrabold uppercase tracking-wide" style={{ fontSize: '8px', lineHeight: '10px' }} title="Este colaborador foi registrado pela administração">
+                                              Cadastrado pelo Admin
+                                            </span>
+                                          )}
+                                        </div>
                                       </td>
                                       <td className="py-3 text-stone-700 font-semibold italic text-xs">{item.apelido || '-'}</td>
                                       <td className="py-3 text-gray-600 font-mono select-all text-xs">{item.email}</td>

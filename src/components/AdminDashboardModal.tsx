@@ -107,6 +107,7 @@ interface UserProfile {
   apelido?: string;
   telefone?: string;
   status_convite?: 'pendente' | 'aceito';
+  cadastrado_por?: string;
 }
 
 interface InviteEmailLog {
@@ -299,6 +300,7 @@ export default function AdminDashboardModal({
   const [colaboradorAtivo, setColaboradorAtivo] = useState(true);
   const [colaboradorCondoId, setColaboradorCondoId] = useState('cd-1');
   const [colaboradorSearch, setColaboradorSearch] = useState('');
+  const [colaboradorFiltroOrigem, setColaboradorFiltroOrigem] = useState<'todos' | 'admin'>('todos');
 
   // Role Types Dynamic States & Forms definition
   const [roleTypes, setRoleTypes] = useState<RoleType[]>([]);
@@ -1576,7 +1578,8 @@ export default function AdminDashboardModal({
       condominio_id: colaboradorCondoId,
       apelido: colaboradorApelido.trim(),
       telefone: colaboradorTelefone.trim(),
-      status_convite: isEdit ? (loadedColab?.status_convite || 'aceito') : 'pendente'
+      status_convite: isEdit ? (loadedColab?.status_convite || 'aceito') : 'pendente',
+      cadastrado_por: isEdit ? (loadedColab?.cadastrado_por || 'Administrador') : 'Administrador'
     };
 
     if (isEdit) {
@@ -1601,7 +1604,8 @@ export default function AdminDashboardModal({
           condominio_id: colaboradorCondoId,
           apelido: colaboradorApelido.trim(),
           telefone: colaboradorTelefone.trim(),
-          status_convite: profileData.status_convite
+          status_convite: profileData.status_convite,
+          cadastrado_por: profileData.cadastrado_por
         });
       } catch (err: any) {
         console.error('Erro ao salvar colaborador no Supabase:', err.message);
@@ -1652,47 +1656,52 @@ export default function AdminDashboardModal({
       return;
     }
 
-    if (!confirm(`Confirmar exclusão de cadastro do colaborador "${name}"?`)) {
-      return;
-    }
+    setDeleteConfirm({
+      isOpen: true,
+      title: 'Confirmar Exclusão de Colaborador',
+      message: `Deseja realmente remover o colaborador "${name}"? Esta ação é irreversível e removerá as credenciais e o status correspondentes no aplicativo.`,
+      onConfirm: async () => {
+        setDeleteConfirm(null);
+        
+        setProfilesList(prev => prev.filter(p => p.id !== id));
+        addAuditLog('EXCLUIR', 'perfis', `Deletado colaborador: ${name}`);
 
-    setProfilesList(prev => prev.filter(p => p.id !== id));
-    addAuditLog('EXCLUIR', 'perfis', `Deletado colaborador: ${name}`);
+        // Deleta do Supabase se houver conexão
+        if (isSupabaseConfigured && supabase) {
+          try {
+            await supabase.from('perfil').delete().eq('id', id);
+          } catch (err: any) {
+            console.error('Erro ao excluir colaborador no Supabase:', err.message);
+          }
+        }
 
-    // Deleta do Supabase se houver conexão
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('perfil').delete().eq('id', id);
-      } catch (err: any) {
-        console.error('Erro ao excluir colaborador no Supabase:', err.message);
+        // Exclui do localStorage
+        const localDataColab = localStorage.getItem('supabase_sim_perfis');
+        if (localDataColab) {
+          let localListColab: UserProfile[] = JSON.parse(localDataColab);
+          localListColab = localListColab.filter(p => p.id !== id);
+          localStorage.setItem('supabase_sim_perfis', JSON.stringify(localListColab));
+        }
+
+        // Exclui de facilities_portal_users
+        const savedUsers = localStorage.getItem('facilities_portal_users');
+        if (savedUsers) {
+          try {
+            let users = JSON.parse(savedUsers);
+            const colabProfile = profilesList.find(p => p.id === id);
+            const colabEmail = colabProfile?.email?.toLowerCase();
+            users = users.filter((u: any) => {
+              if (colabEmail && u.email?.toLowerCase() === colabEmail) return false;
+              if (u.name === name) return false;
+              return true;
+            });
+            localStorage.setItem('facilities_portal_users', JSON.stringify(users));
+          } catch {}
+        }
+
+        onShowMessage("Sucesso", "Colaborador removido com sucesso.");
       }
-    }
-
-    // Exclui do localStorage
-    const localDataColab = localStorage.getItem('supabase_sim_perfis');
-    if (localDataColab) {
-      let localListColab: UserProfile[] = JSON.parse(localDataColab);
-      localListColab = localListColab.filter(p => p.id !== id);
-      localStorage.setItem('supabase_sim_perfis', JSON.stringify(localListColab));
-    }
-
-    // Exclui de facilities_portal_users
-    const savedUsers = localStorage.getItem('facilities_portal_users');
-    if (savedUsers) {
-      try {
-        let users = JSON.parse(savedUsers);
-        const colabProfile = profilesList.find(p => p.id === id);
-        const colabEmail = colabProfile?.email?.toLowerCase();
-        users = users.filter((u: any) => {
-          if (colabEmail && u.email?.toLowerCase() === colabEmail) return false;
-          if (u.name === name) return false;
-          return true;
-        });
-        localStorage.setItem('facilities_portal_users', JSON.stringify(users));
-      } catch {}
-    }
-
-    onShowMessage("Sucesso", "Colaborador removido com sucesso.");
+    });
   };
 
   const handleToggleColaboradorAtivo = async (item: UserProfile) => {
@@ -3794,17 +3803,45 @@ export default function AdminDashboardModal({
                               <p className="text-[10px] text-gray-400 font-bold">Apenas administradores podem gerenciar, adicionar, editar dados ou remover contas.</p>
                             </div>
                             
-                            <div className="relative">
-                              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                <Search className="w-3.5 h-3.5 text-gray-400" />
-                              </span>
-                              <input
-                                type="text"
-                                value={colaboradorSearch}
-                                onChange={(e) => setColaboradorSearch(e.target.value)}
-                                placeholder="Filtrar colaboradores..."
-                                className="pl-9 pr-4 py-1.5 bg-[#f1f4f8] text-xs outline-none rounded-lg font-bold text-[#101c29] border border-transparent focus:border-stone-200"
-                              />
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* Filtro por Origem de Cadastro */}
+                              <div className="flex bg-[#f1f4f8] p-1 rounded-lg border border-gray-100">
+                                <button
+                                  type="button"
+                                  onClick={() => setColaboradorFiltroOrigem('todos')}
+                                  className={`px-3 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                                    colaboradorFiltroOrigem === 'todos'
+                                      ? 'bg-white text-[#af101a] shadow-sm'
+                                      : 'text-[#5f5e5e] hover:text-gray-900 font-bold'
+                                  }`}
+                                >
+                                  Todos
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setColaboradorFiltroOrigem('admin')}
+                                  className={`px-3 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
+                                    colaboradorFiltroOrigem === 'admin'
+                                      ? 'bg-white text-[#af101a] shadow-sm'
+                                      : 'text-[#5f5e5e] hover:text-gray-900 font-bold'
+                                  }`}
+                                >
+                                  Cadastrados por Admin
+                                </button>
+                              </div>
+
+                              <div className="relative">
+                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                  <Search className="w-3.5 h-3.5 text-gray-400" />
+                                </span>
+                                <input
+                                  type="text"
+                                  value={colaboradorSearch}
+                                  onChange={(e) => setColaboradorSearch(e.target.value)}
+                                  placeholder="Filtrar colaboradores..."
+                                  className="pl-9 pr-4 py-1.5 bg-[#f1f4f8] text-xs outline-none rounded-lg font-bold text-[#101c29] border border-transparent focus:border-stone-200"
+                                />
+                              </div>
                             </div>
                           </div>
 
@@ -3829,6 +3866,12 @@ export default function AdminDashboardModal({
                                   const colabs = profilesList.filter(p => {
                                     const roleStr = (p.tipo || p.perfil || '').toLowerCase();
                                     return roleStr === 'colaborador' || roleStr === 'colab';
+                                  }).filter(p => {
+                                    if (colaboradorFiltroOrigem === 'admin') {
+                                      // Se o filtro for ativo, mostra perfis criados pela admin ou se tiver marcado cadastrado_por como Administrador
+                                      return p.cadastrado_por === 'Administrador' || p.cadastrado_por === 'admin' || p.id.startsWith('p-') || !p.cadastrado_por;
+                                    }
+                                    return true;
                                   }).filter(p => {
                                     if (!colaboradorSearch.trim()) return true;
                                     const searchLower = colaboradorSearch.toLowerCase();
@@ -3871,7 +3914,14 @@ export default function AdminDashboardModal({
                                           <div className="w-7 h-7 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold text-[10px]">
                                             {item.nome.charAt(0).toUpperCase()}
                                           </div>
-                                          {item.nome}
+                                          <div className="flex flex-col items-start gap-0.5">
+                                            <span className="text-stone-850 font-bold">{item.nome}</span>
+                                            {(item.cadastrado_por === 'Administrador' || item.cadastrado_por === 'admin' || item.id.startsWith('p-') || !item.cadastrado_por) && (
+                                              <span className="bg-red-50 text-[#af101a] border border-red-150 text-[8px] px-1.5 py-0.5 rounded font-extrabold uppercase tracking-wide" style={{ fontSize: '8px', lineHeight: '10px' }} title="Este colaborador foi registrado pela administração">
+                                                Cadastrado pelo Admin
+                                              </span>
+                                            )}
+                                          </div>
                                         </td>
                                         <td className="py-3 text-stone-700 font-semibold italic text-xs">{item.apelido || '-'}</td>
                                         <td className="py-3 text-gray-600 font-mono select-all text-xs">{item.email}</td>
