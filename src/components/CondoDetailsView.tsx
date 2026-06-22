@@ -2714,6 +2714,218 @@ export default function CondoDetailsView({
         </div>
       )}
 
+      {/* BLOCO ADD/EDIT MODAL overlay */}
+      {showAddBlockModal && (
+        <div id="modal-adicionar-bloco" className="fixed inset-0 z-[9999] flex items-center justify-center bg-stone-900/60 backdrop-blur-xs animate-fade-in p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-[0_24px_60px_-15px_rgba(0,0,0,0.30)] border border-gray-150 space-y-5 my-8">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3 text-left">
+              <h3 className="text-xs font-black text-[#0f1b29] uppercase tracking-wider flex items-center gap-2">
+                <Layers className="w-5 h-5 text-primary" /> 
+                {editingBlock ? 'Editar Estrutura de Bloco' : 'Adicionar Novo Bloco / Edifício'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowAddBlockModal(false);
+                  setEditingBlock(null);
+                  setBlockName('');
+                  setBlockUnitsCount(12);
+                }}
+                className="text-gray-400 hover:text-gray-650 font-bold transition-colors cursor-pointer border-0 bg-transparent text-xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleAddBlockSubmit} className="space-y-4 text-left">
+              <div className="grid grid-cols-1 gap-4">
+                {/* Nome do Bloco */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Nome do Bloco / Torre <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={blockName}
+                    onChange={(e) => setBlockName(e.target.value)}
+                    placeholder="Ex: Bloco C, Torre 1, Edifício A"
+                    className="w-full bg-stone-50 border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-stone-500 text-stone-700 leading-normal"
+                  />
+                </div>
+
+                {/* Quantidade de Unidades */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Número de Unidades Estimadas</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={blockUnitsCount}
+                    onChange={(e) => setBlockUnitsCount(Number(e.target.value))}
+                    placeholder="Ex: 12"
+                    className="w-full bg-stone-50 border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-stone-500 text-stone-700 leading-normal"
+                  />
+                  <p className="text-[9px] text-gray-400 mt-0.5">Define a contagem de unidades residenciais contidas neste bloco.</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100 select-none">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddBlockModal(false);
+                    setEditingBlock(null);
+                    setBlockName('');
+                    setBlockUnitsCount(12);
+                  }}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-[#475569] text-xs font-bold rounded-xl transition-all duration-150 cursor-pointer border-0"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-primary hover:bg-[#af101a] text-white text-xs font-bold rounded-xl transition-all duration-150 cursor-pointer border-0 shadow-sm"
+                >
+                  {editingBlock ? 'Salvar Alterações' : 'Cadastrar Bloco'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* UNIDADE ADD/EDIT MODAL overlay */}
+      {showAddUnitModal && (
+        <div id="modal-adicionar-unidade" className="fixed inset-0 z-[9999] flex items-center justify-center bg-stone-900/60 backdrop-blur-xs animate-fade-in p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-[0_24px_60px_-15px_rgba(0,0,0,0.30)] border border-gray-150 space-y-5 my-8">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3 text-left">
+              <h3 className="text-xs font-black text-[#0f1b29] uppercase tracking-wider flex items-center gap-2">
+                <Home className="w-5 h-5 text-primary" /> 
+                {editingUnit ? 'Editar Unidade' : 'Adicionar Nova Unidade / Apartamento'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowAddUnitModal(false);
+                  setEditingUnit(null);
+                  setUnitNumber('');
+                  setUnitBlock('');
+                  setUnitOwner('');
+                  setUnitResident('');
+                  setUnitStatus('Ocupado');
+                }}
+                className="text-gray-400 hover:text-gray-650 font-bold transition-colors cursor-pointer border-0 bg-transparent text-xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            <form onSubmit={handleAddUnitSubmit} className="space-y-4 text-left">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Número do Apartamento */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Número / Apt <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={unitNumber}
+                    onChange={(e) => setUnitNumber(e.target.value)}
+                    placeholder="Ex: 14, 102, C-4"
+                    className="w-full bg-stone-50 border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-stone-500 text-stone-700 leading-normal"
+                  />
+                </div>
+
+                {/* Bloco Vinculado */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Bloco / Torre <span className="text-red-500">*</span></label>
+                  {blocks.length > 0 ? (
+                    <select
+                      required
+                      value={unitBlock}
+                      onChange={(e) => setUnitBlock(e.target.value)}
+                      className="w-full bg-stone-50 border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-stone-500 text-stone-700 leading-normal cursor-pointer"
+                    >
+                      <option value="">Selecione o Bloco</option>
+                      {blocks.map(b => (
+                        <option key={b.id} value={b.name}>{b.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      required
+                      value={unitBlock}
+                      onChange={(e) => setUnitBlock(e.target.value)}
+                      placeholder="Ex: Bloco A"
+                      className="w-full bg-stone-50 border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-stone-500 text-stone-700 leading-normal"
+                    />
+                  )}
+                </div>
+
+                {/* Proprietário */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Proprietário</label>
+                  <input
+                    type="text"
+                    value={unitOwner}
+                    onChange={(e) => setUnitOwner(e.target.value)}
+                    placeholder="Ex: Antônio Carlos"
+                    className="w-full bg-stone-50 border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-stone-500 text-stone-700 leading-normal"
+                  />
+                </div>
+
+                {/* Morador Principal */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Morador Principal</label>
+                  <input
+                    type="text"
+                    value={unitResident}
+                    onChange={(e) => setUnitResident(e.target.value)}
+                    placeholder="Ex: Carlos Eduardo"
+                    className="w-full bg-stone-50 border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-stone-500 text-stone-700 leading-normal"
+                  />
+                </div>
+
+                {/* Situação da Ocupação */}
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block">Situação da Unidade</label>
+                  <select
+                    value={unitStatus}
+                    onChange={(e) => setUnitStatus(e.target.value)}
+                    className="w-full bg-stone-50 border border-gray-250 p-2.5 rounded-lg text-xs outline-none focus:border-stone-500 text-stone-700 leading-normal cursor-pointer"
+                  >
+                    <option value="Ocupado">Ocupado</option>
+                    <option value="Vago">Vago</option>
+                    <option value="Reforma">Em Reforma</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100 select-none">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddUnitModal(false);
+                    setEditingUnit(null);
+                    setUnitNumber('');
+                    setUnitBlock('');
+                    setUnitOwner('');
+                    setUnitResident('');
+                    setUnitStatus('Ocupado');
+                  }}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-[#475569] text-xs font-bold rounded-xl transition-all duration-150 cursor-pointer border-0"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-primary hover:bg-[#af101a] text-white text-xs font-bold rounded-xl transition-all duration-150 cursor-pointer border-0 shadow-sm"
+                >
+                  {editingUnit ? 'Salvar Alterações' : 'Cadastrar Unidade'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <AddSindicoModal
         isOpen={showAddSindicoModal}
         onClose={() => {
